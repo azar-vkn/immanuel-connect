@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { mockMembers, mockAttendance, mockEvents, teams } from '@/data/mockData';
+import React, { useState, useMemo, useEffect } from 'react';
+import { mockMembers, mockAttendance, mockEvents } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
+import { Team } from '@/types/team';
+import { TeamManagementDialog } from '@/components/teams/TeamManagementDialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -21,12 +23,35 @@ interface FollowUpStatus {
   };
 }
 
+// Initialize default teams from localStorage or create defaults
+const getInitialTeams = (): Team[] => {
+  const saved = localStorage.getItem('iag_teams');
+  if (saved) {
+    return JSON.parse(saved);
+  }
+  // Default teams
+  return [
+    { id: 'T1', name: 'Team A', leaders: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'T2', name: 'Team B', leaders: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'T3', name: 'Team C', leaders: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'T4', name: 'Team D', leaders: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'T5', name: 'Team E', leaders: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  ];
+};
+
 const FollowUp: React.FC = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [followUpStatus, setFollowUpStatus] = useState<FollowUpStatus>({});
+  const [teams, setTeams] = useState<Team[]>(getInitialTeams);
 
   const canEdit = hasPermission('followup.edit');
+  const isAdmin = user?.role === 'admin';
+
+  // Persist teams to localStorage
+  useEffect(() => {
+    localStorage.setItem('iag_teams', JSON.stringify(teams));
+  }, [teams]);
 
   // Get the last event
   const lastEvent = mockEvents[0];
@@ -72,11 +97,18 @@ const FollowUp: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="animate-fade-in">
-        <h1 className="font-serif text-3xl font-bold text-gold-gradient">Follow-Up</h1>
-        <p className="text-muted-foreground">
-          Track and follow up with absent members from the last event
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in">
+        <div>
+          <h1 className="font-serif text-3xl font-bold text-gold-gradient">Follow-Up</h1>
+          <p className="text-muted-foreground">
+            Track and follow up with absent members from the last event
+          </p>
+        </div>
+        
+        {/* Team Management Button (Admin Only) */}
+        {isAdmin && (
+          <TeamManagementDialog teams={teams} onTeamsChange={setTeams} />
+        )}
       </div>
 
       {/* Team Selection */}
@@ -88,8 +120,8 @@ const FollowUp: React.FC = () => {
           </SelectTrigger>
           <SelectContent>
             {teams.map(team => (
-              <SelectItem key={team} value={team}>
-                {team}
+              <SelectItem key={team.id} value={team.name}>
+                {team.name}
               </SelectItem>
             ))}
           </SelectContent>

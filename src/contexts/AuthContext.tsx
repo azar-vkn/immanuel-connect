@@ -36,7 +36,8 @@ const rolePermissions: Record<UserRole, string[]> = {
     'events.view', 'events.create', 'events.edit',
     'attendance.view', 'attendance.mark',
     'reports.view', 'reports.export',
-    'followup.view', 'followup.edit'
+    'followup.view', 'followup.edit',
+    'teams.manage' // Admin can manage teams
   ],
   marker: [
     'dashboard.view',

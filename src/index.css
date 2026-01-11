@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    /* Deep Navy Blue Theme */
+    /* Deep Navy Blue Theme - Dark Mode (Default) */
     --background: 220 30% 8%;
     --foreground: 45 30% 95%;
 
@@ -68,6 +68,63 @@
     --sidebar-accent-foreground: 45 30% 95%;
     --sidebar-border: 220 30% 20%;
     --sidebar-ring: 43 74% 49%;
+  }
+
+  /* Light Mode */
+  .light {
+    --background: 45 30% 98%;
+    --foreground: 220 40% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 40% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 40% 15%;
+
+    /* Rich Gold Primary - darker for light mode */
+    --primary: 43 74% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Light Secondary */
+    --secondary: 220 20% 92%;
+    --secondary-foreground: 220 40% 15%;
+
+    --muted: 220 15% 90%;
+    --muted-foreground: 220 15% 40%;
+
+    /* Gold Accent */
+    --accent: 43 74% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 85%;
+    --input: 220 15% 92%;
+    --ring: 43 74% 45%;
+
+    /* Custom Colors */
+    --gold: 43 74% 40%;
+    --gold-light: 43 80% 50%;
+    --gold-dark: 43 70% 30%;
+    --navy: 220 40% 25%;
+    --navy-light: 220 35% 40%;
+    --navy-dark: 220 45% 15%;
+    
+    /* Glass Effect */
+    --glass-bg: 0 0% 100% / 0.9;
+    --glass-border: 220 15% 80% / 0.5;
+    --glass-shadow: 220 20% 70% / 0.2;
+
+    /* Sidebar */
+    --sidebar-background: 220 30% 97%;
+    --sidebar-foreground: 220 40% 15%;
+    --sidebar-primary: 43 74% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 92%;
+    --sidebar-accent-foreground: 220 40% 15%;
+    --sidebar-border: 220 15% 88%;
+    --sidebar-ring: 43 74% 45%;
   }
 
   .dark {
@@ -153,7 +210,7 @@
     background: 
       radial-gradient(ellipse at 20% 20%, hsl(var(--gold) / 0.08) 0%, transparent 50%),
       radial-gradient(ellipse at 80% 80%, hsl(var(--gold) / 0.05) 0%, transparent 50%),
-      linear-gradient(180deg, hsl(220 40% 10%), hsl(220 45% 6%));
+      hsl(var(--background));
   }
 
   /* Card Hover Effect */

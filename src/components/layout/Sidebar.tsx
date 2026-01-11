@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { CrossIcon } from '@/components/CrossIcon';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -102,10 +103,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
         </ul>
       </nav>
 
-      {/* User Info & Logout */}
-      <div className="p-3 border-t border-sidebar-border">
+      {/* Theme Toggle & User Info & Logout */}
+      <div className="p-3 border-t border-sidebar-border space-y-2">
+        {/* Theme Toggle */}
+        <ThemeToggle collapsed={collapsed} />
+        
         {!collapsed && user && (
-          <div className="mb-3 px-3 py-2 rounded-lg bg-sidebar-accent/50">
+          <div className="px-3 py-2 rounded-lg bg-sidebar-accent/50">
             <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
             <p className="text-xs text-muted-foreground capitalize">{user.role.replace('_', ' ')}</p>
           </div>

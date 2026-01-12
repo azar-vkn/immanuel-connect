@@ -33,6 +33,8 @@ import {
 } from 'lucide-react';
 import { MemberForm } from '@/components/members/MemberForm';
 import { MemberIDCard } from '@/components/members/MemberIDCard';
+import { MemberViewDialog } from '@/components/members/MemberViewDialog';
+import { toast } from 'sonner';
 
 const Members: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -41,6 +43,8 @@ const Members: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [showIdCard, setShowIdCard] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const filteredMembers = useMemo(() => {
     if (!searchQuery) return members;
@@ -60,7 +64,25 @@ const Members: React.FC = () => {
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this member?')) {
       setMembers(members.filter((m) => m.id !== id));
+      toast.success('Member deleted successfully');
     }
+  };
+
+  const handleView = (member: Member) => {
+    setSelectedMember(member);
+    setShowViewDialog(true);
+  };
+
+  const handleEdit = (member: Member) => {
+    setSelectedMember(member);
+    setShowEditDialog(true);
+  };
+
+  const handleSaveEdit = (updatedMember: Member) => {
+    setMembers(members.map(m => m.id === updatedMember.id ? updatedMember : m));
+    setShowEditDialog(false);
+    setSelectedMember(null);
+    toast.success('Member updated successfully');
   };
 
   return (
@@ -100,6 +122,7 @@ const Members: React.FC = () => {
                   onSave={(member) => {
                     setMembers([...members, member]);
                     setShowAddModal(false);
+                    toast.success('Member added successfully');
                   }}
                   onCancel={() => setShowAddModal(false)}
                 />
@@ -187,6 +210,7 @@ const Members: React.FC = () => {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleView(member)}
                     >
                       <Eye className="w-4 h-4" />
                     </Button>
@@ -195,6 +219,7 @@ const Members: React.FC = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-blue-400"
+                        onClick={() => handleEdit(member)}
                       >
                         <Edit2 className="w-4 h-4" />
                       </Button>
@@ -230,6 +255,29 @@ const Members: React.FC = () => {
             <DialogTitle className="font-serif text-xl">Member ID Card</DialogTitle>
           </DialogHeader>
           {selectedMember && <MemberIDCard member={selectedMember} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* View Member Dialog */}
+      <MemberViewDialog
+        member={selectedMember}
+        open={showViewDialog}
+        onOpenChange={setShowViewDialog}
+      />
+
+      {/* Edit Member Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto glass">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Edit Member</DialogTitle>
+          </DialogHeader>
+          {selectedMember && (
+            <MemberForm
+              member={selectedMember}
+              onSave={handleSaveEdit}
+              onCancel={() => setShowEditDialog(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

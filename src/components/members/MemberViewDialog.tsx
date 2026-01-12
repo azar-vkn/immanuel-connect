@@ -1,0 +1,199 @@
+import React from 'react';
+import { Member } from '@/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { User, Phone, MapPin, Calendar, Church, Users } from 'lucide-react';
+import { format } from 'date-fns';
+
+interface MemberViewDialogProps {
+  member: Member | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
+  member,
+  open,
+  onOpenChange,
+}) => {
+  if (!member) return null;
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      return format(new Date(dateStr), 'dd MMM yyyy');
+    } catch {
+      return dateStr;
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto glass">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl flex items-center gap-2">
+            <User className="w-5 h-5 text-primary" />
+            Member Details
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* Header Info */}
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">{member.name}</h2>
+              <p className="text-primary font-mono">{member.memberId}</p>
+            </div>
+            <div className="flex gap-2">
+              <Badge
+                variant="outline"
+                className={
+                  member.baptismStatus === 'baptized'
+                    ? 'badge-success'
+                    : 'badge-warning'
+                }
+              >
+                {member.baptismStatus === 'baptized' ? 'Baptized' : 'Not Baptized'}
+              </Badge>
+              <Badge variant="outline" className="capitalize">
+                {member.churchRole}
+              </Badge>
+            </div>
+          </div>
+
+          <Separator className="bg-border/50" />
+
+          {/* Personal Information */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <User className="w-4 h-4 text-primary" />
+              Personal Information
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Date of Birth</span>
+                <p className="font-medium">{formatDate(member.dob)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Gender</span>
+                <p className="font-medium capitalize">{member.gender}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Marital Status</span>
+                <p className="font-medium capitalize">{member.maritalStatus}</p>
+              </div>
+              {member.maritalStatus === 'married' && member.anniversaryDate && (
+                <div>
+                  <span className="text-muted-foreground">Anniversary</span>
+                  <p className="font-medium">{formatDate(member.anniversaryDate)}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Separator className="bg-border/50" />
+
+          {/* Contact Information */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <Phone className="w-4 h-4 text-primary" />
+              Contact Information
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Phone</span>
+                <p className="font-medium">{member.phone}</p>
+              </div>
+              {member.additionalPhones && member.additionalPhones.length > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Additional Phones</span>
+                  <p className="font-medium">{member.additionalPhones.join(', ')}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Separator className="bg-border/50" />
+
+          {/* Address */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-primary" />
+              Address
+            </h3>
+            <div className="text-sm space-y-1">
+              <p className="font-medium">
+                {member.address.place && `${member.address.place}, `}
+                {member.address.city}
+              </p>
+              <p className="text-muted-foreground">
+                {member.address.district && `${member.address.district}, `}
+                {member.address.state}
+                {member.address.pincode && ` - ${member.address.pincode}`}
+              </p>
+              <p className="text-muted-foreground">{member.address.country}</p>
+            </div>
+          </div>
+
+          <Separator className="bg-border/50" />
+
+          {/* Church Information */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <Church className="w-4 h-4 text-primary" />
+              Church Information
+            </h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Role</span>
+                <p className="font-medium capitalize">{member.churchRole}</p>
+              </div>
+              {member.team && (
+                <div>
+                  <span className="text-muted-foreground">Team</span>
+                  <p className="font-medium">{member.team}</p>
+                </div>
+              )}
+              {member.baptismStatus === 'baptized' && member.baptismDate && (
+                <div>
+                  <span className="text-muted-foreground">Baptism Date</span>
+                  <p className="font-medium">{formatDate(member.baptismDate)}</p>
+                </div>
+              )}
+              <div>
+                <span className="text-muted-foreground">Member Type</span>
+                <p className="font-medium capitalize">{member.memberType}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Remarks */}
+          {member.remarks && (
+            <>
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Remarks</h3>
+                <p className="text-sm text-muted-foreground bg-secondary/30 p-3 rounded-lg">
+                  {member.remarks}
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Metadata */}
+          <Separator className="bg-border/50" />
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Created: {formatDate(member.createdAt)}</span>
+            <span>Updated: {formatDate(member.updatedAt)}</span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};

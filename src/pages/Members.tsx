@@ -19,7 +19,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import {
   Search,
   Plus,
@@ -29,12 +42,20 @@ import {
   Edit2,
   Trash2,
   CreditCard,
-  Filter
+  Filter,
+  X
 } from 'lucide-react';
 import { MemberForm } from '@/components/members/MemberForm';
 import { MemberIDCard } from '@/components/members/MemberIDCard';
 import { MemberViewDialog } from '@/components/members/MemberViewDialog';
 import { toast } from 'sonner';
+
+interface Filters {
+  team: string;
+  gender: string;
+  ageRange: string;
+  churchRole: string;
+}
 
 const Members: React.FC = () => {
   const { hasPermission } = useAuth();
@@ -45,17 +66,82 @@ const Members: React.FC = () => {
   const [showIdCard, setShowIdCard] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    team: '',
+    gender: '',
+    ageRange: '',
+    churchRole: ''
+  });
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Get unique teams from members
+  const teams = useMemo(() => {
+    const uniqueTeams = new Set(members.map(m => m.team).filter(Boolean));
+    return Array.from(uniqueTeams);
+  }, [members]);
+
+  // Calculate age from DOB
+  const calculateAge = (dob: string): number => {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Check if age is in range
+  const isInAgeRange = (dob: string, range: string): boolean => {
+    if (!range) return true;
+    const age = calculateAge(dob);
+    switch (range) {
+      case '0-12': return age >= 0 && age <= 12;
+      case '13-19': return age >= 13 && age <= 19;
+      case '20-35': return age >= 20 && age <= 35;
+      case '36-50': return age >= 36 && age <= 50;
+      case '51-65': return age >= 51 && age <= 65;
+      case '65+': return age > 65;
+      default: return true;
+    }
+  };
+
+  const activeFiltersCount = useMemo(() => {
+    return Object.values(filters).filter(Boolean).length;
+  }, [filters]);
+
+  const clearFilters = () => {
+    setFilters({ team: '', gender: '', ageRange: '', churchRole: '' });
+  };
 
   const filteredMembers = useMemo(() => {
-    if (!searchQuery) return members;
-    const query = searchQuery.toLowerCase();
-    return members.filter(
-      (m) =>
-        m.name.toLowerCase().includes(query) ||
-        m.phone.includes(query) ||
-        m.memberId.toLowerCase().includes(query)
-    );
-  }, [members, searchQuery]);
+    return members.filter((m) => {
+      // Search query filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = 
+          m.name.toLowerCase().includes(query) ||
+          m.phone.includes(query) ||
+          m.memberId.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+      
+      // Team filter
+      if (filters.team && m.team !== filters.team) return false;
+      
+      // Gender filter
+      if (filters.gender && m.gender !== filters.gender) return false;
+      
+      // Age range filter
+      if (filters.ageRange && !isInAgeRange(m.dob, filters.ageRange)) return false;
+      
+      // Church role filter
+      if (filters.churchRole && m.churchRole !== filters.churchRole) return false;
+      
+      return true;
+    });
+  }, [members, searchQuery, filters]);
 
   const canEdit = hasPermission('members.edit');
   const canDelete = hasPermission('members.delete');
@@ -143,11 +229,162 @@ const Members: React.FC = () => {
             className="pl-10 bg-secondary/50 border-border/50"
           />
         </div>
-        <Button variant="outline" className="gap-2">
-          <Filter className="w-4 h-4" />
-          Filters
-        </Button>
+        <Popover open={showFilters} onOpenChange={setShowFilters}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="gap-2 relative">
+              <Filter className="w-4 h-4" />
+              Filters
+              {activeFiltersCount > 0 && (
+                <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center bg-primary text-primary-foreground text-xs">
+                  {activeFiltersCount}
+                </Badge>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 glass" align="end">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Filter Members</h4>
+                {activeFiltersCount > 0 && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={clearFilters}
+                    className="h-auto p-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3 h-3 mr-1" />
+                    Clear all
+                  </Button>
+                )}
+              </div>
+              
+              {/* Team Filter */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Team</Label>
+                <Select 
+                  value={filters.team} 
+                  onValueChange={(value) => setFilters(prev => ({ ...prev, team: value === 'all' ? '' : value }))}
+                >
+                  <SelectTrigger className="bg-secondary/50">
+                    <SelectValue placeholder="All Teams" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Teams</SelectItem>
+                    {teams.map(team => (
+                      <SelectItem key={team} value={team!}>{team}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Gender Filter */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Gender</Label>
+                <Select 
+                  value={filters.gender} 
+                  onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value === 'all' ? '' : value }))}
+                >
+                  <SelectTrigger className="bg-secondary/50">
+                    <SelectValue placeholder="All Genders" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Genders</SelectItem>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Age Range Filter */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Age Range</Label>
+                <Select 
+                  value={filters.ageRange} 
+                  onValueChange={(value) => setFilters(prev => ({ ...prev, ageRange: value === 'all' ? '' : value }))}
+                >
+                  <SelectTrigger className="bg-secondary/50">
+                    <SelectValue placeholder="All Ages" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Ages</SelectItem>
+                    <SelectItem value="0-12">Children (0-12)</SelectItem>
+                    <SelectItem value="13-19">Teens (13-19)</SelectItem>
+                    <SelectItem value="20-35">Young Adults (20-35)</SelectItem>
+                    <SelectItem value="36-50">Adults (36-50)</SelectItem>
+                    <SelectItem value="51-65">Seniors (51-65)</SelectItem>
+                    <SelectItem value="65+">Elders (65+)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Church Role Filter */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Church Role</Label>
+                <Select 
+                  value={filters.churchRole} 
+                  onValueChange={(value) => setFilters(prev => ({ ...prev, churchRole: value === 'all' ? '' : value }))}
+                >
+                  <SelectTrigger className="bg-secondary/50">
+                    <SelectValue placeholder="All Roles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="attendee">Attendee</SelectItem>
+                    <SelectItem value="volunteer">Volunteer</SelectItem>
+                    <SelectItem value="host">Host</SelectItem>
+                    <SelectItem value="operator">Operator</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button 
+                className="w-full" 
+                onClick={() => setShowFilters(false)}
+              >
+                Apply Filters
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
+
+      {/* Active Filters Display */}
+      {activeFiltersCount > 0 && (
+        <div className="flex flex-wrap gap-2 animate-fade-in">
+          {filters.team && (
+            <Badge variant="secondary" className="gap-1 pl-2">
+              Team: {filters.team}
+              <button onClick={() => setFilters(prev => ({ ...prev, team: '' }))} className="ml-1 hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          )}
+          {filters.gender && (
+            <Badge variant="secondary" className="gap-1 pl-2">
+              Gender: {filters.gender}
+              <button onClick={() => setFilters(prev => ({ ...prev, gender: '' }))} className="ml-1 hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          )}
+          {filters.ageRange && (
+            <Badge variant="secondary" className="gap-1 pl-2">
+              Age: {filters.ageRange}
+              <button onClick={() => setFilters(prev => ({ ...prev, ageRange: '' }))} className="ml-1 hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          )}
+          {filters.churchRole && (
+            <Badge variant="secondary" className="gap-1 pl-2">
+              Role: {filters.churchRole}
+              <button onClick={() => setFilters(prev => ({ ...prev, churchRole: '' }))} className="ml-1 hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Members Table */}
       <div className="glass rounded-xl overflow-hidden animate-fade-in [animation-delay:200ms]">

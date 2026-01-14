@@ -26,7 +26,7 @@ const Login: React.FC = () => {
         toast.success('Welcome to Immanuel AG Church');
         navigate('/dashboard');
       } else {
-        toast.error('Invalid credentials');
+        toast.error('Invalid credentials or user not configured');
       }
     } catch (error) {
       toast.error('Login failed. Please try again.');
@@ -114,25 +114,6 @@ const Login: React.FC = () => {
               )}
             </Button>
           </form>
-
-          {/* Demo Credentials */}
-          <div className="mt-6 pt-6 border-t border-border/30">
-            <p className="text-xs text-muted-foreground text-center mb-3">Demo Credentials</p>
-            <div className="grid gap-2 text-xs">
-              <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-secondary/30">
-                <span className="text-muted-foreground">Admin:</span>
-                <span className="text-foreground/80 font-mono">admin@immanuelag.com / admin123</span>
-              </div>
-              <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-secondary/30">
-                <span className="text-muted-foreground">Marker:</span>
-                <span className="text-foreground/80 font-mono">marker@immanuelag.com / marker123</span>
-              </div>
-              <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-secondary/30">
-                <span className="text-muted-foreground">Leader:</span>
-                <span className="text-foreground/80 font-mono">leader@immanuelag.com / leader123</span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}

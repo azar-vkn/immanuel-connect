@@ -1,24 +1,45 @@
-import React, { useState } from 'react';
-import { mockFamilies, mockMembers } from '@/data/mockData';
+import React, { useState, useEffect } from 'react';
+import { getFamilies, getMembers, updateFamily, deleteFamily as deleteFirestoreFamily } from '@/services/firestore';
 import { Family, Member } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { UsersRound, Edit2, Trash2, User, Eye } from 'lucide-react';
+import { UsersRound, Edit2, Trash2, User, Eye, Loader2 } from 'lucide-react';
 import { FamilyViewDialog } from '@/components/families/FamilyViewDialog';
 import { FamilyEditDialog } from '@/components/families/FamilyEditDialog';
 import { toast } from 'sonner';
 
 const Families: React.FC = () => {
   const { hasPermission } = useAuth();
-  const [families, setFamilies] = useState<Family[]>(mockFamilies);
-  const [members] = useState<Member[]>(mockMembers);
+  const [families, setFamilies] = useState<Family[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedFamily, setSelectedFamily] = useState<Family | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const canEdit = hasPermission('families.edit');
   const canDelete = hasPermission('families.delete');
+
+  // Fetch data from Firestore
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [familiesData, membersData] = await Promise.all([
+          getFamilies(),
+          getMembers()
+        ]);
+        setFamilies(familiesData);
+        setMembers(membersData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load families');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const getFamilyMembers = (memberIds: string[]) => {
     return members.filter(m => memberIds.includes(m.id));
@@ -34,17 +55,38 @@ const Families: React.FC = () => {
     setShowEditDialog(true);
   };
 
-  const handleSaveFamily = (updatedFamily: Family) => {
-    setFamilies(families.map(f => f.id === updatedFamily.id ? updatedFamily : f));
-    setSelectedFamily(null);
-  };
-
-  const handleDelete = (familyId: string) => {
-    if (confirm('Are you sure you want to delete this family?')) {
-      setFamilies(families.filter(f => f.id !== familyId));
-      toast.success('Family deleted successfully');
+  const handleSaveFamily = async (updatedFamily: Family) => {
+    try {
+      await updateFamily(updatedFamily.id, updatedFamily);
+      setFamilies(families.map(f => f.id === updatedFamily.id ? updatedFamily : f));
+      setSelectedFamily(null);
+      toast.success('Family updated successfully');
+    } catch (error) {
+      console.error('Error updating family:', error);
+      toast.error('Failed to update family');
     }
   };
+
+  const handleDelete = async (familyId: string) => {
+    if (confirm('Are you sure you want to delete this family?')) {
+      try {
+        await deleteFirestoreFamily(familyId);
+        setFamilies(families.filter(f => f.id !== familyId));
+        toast.success('Family deleted successfully');
+      } catch (error) {
+        console.error('Error deleting family:', error);
+        toast.error('Failed to delete family');
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

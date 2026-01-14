@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { mockMembers, mockAttendance, mockEvents } from '@/data/mockData';
+import { getMembers, getAttendance, getEvents } from '@/services/firestore';
+import { Member, Attendance, ChurchEvent } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Team } from '@/types/team';
 import { TeamManagementDialog } from '@/components/teams/TeamManagementDialog';
@@ -13,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Phone, MapPin, MessageCircle, CheckCircle2, AlertCircle, Users } from 'lucide-react';
+import { Phone, MapPin, MessageCircle, CheckCircle2, AlertCircle, Users, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface FollowUpStatus {
@@ -40,6 +41,10 @@ const getInitialTeams = (): Team[] => {
 
 const FollowUp: React.FC = () => {
   const { hasPermission, user } = useAuth();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [events, setEvents] = useState<ChurchEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [followUpStatus, setFollowUpStatus] = useState<FollowUpStatus>({});
   const [teams, setTeams] = useState<Team[]>(getInitialTeams);
@@ -47,6 +52,28 @@ const FollowUp: React.FC = () => {
   const canEdit = hasPermission('followup.edit');
   const isAdmin = user?.role === 'admin';
   const isAreaLeader = user?.role === 'area_leader';
+
+  // Fetch data from Firestore
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [membersData, attendanceData, eventsData] = await Promise.all([
+          getMembers(),
+          getAttendance(),
+          getEvents()
+        ]);
+        setMembers(membersData);
+        setAttendance(attendanceData);
+        setEvents(eventsData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   // Persist teams to localStorage
   useEffect(() => {
@@ -71,27 +98,27 @@ const FollowUp: React.FC = () => {
   }, [isAreaLeader, accessibleTeams, selectedTeam]);
 
   // Get the last event
-  const lastEvent = mockEvents[0];
+  const lastEvent = events[0];
 
   // Get attendance info for the last event
   const lastEventAttendance = useMemo(() => {
     if (!lastEvent) return new Set<string>();
     return new Set(
-      mockAttendance.filter(a => a.eventId === lastEvent.id).map(a => a.memberId)
+      attendance.filter(a => a.eventId === lastEvent.id).map(a => a.memberId)
     );
-  }, [lastEvent]);
+  }, [lastEvent, attendance]);
 
   // Get all team members with their attendance status
   const teamMembersWithStatus = useMemo(() => {
     if (!selectedTeam) return [];
     
-    return mockMembers
+    return members
       .filter(m => m.team === selectedTeam)
       .map(member => ({
         ...member,
         isPresent: lastEventAttendance.has(member.id)
       }));
-  }, [selectedTeam, lastEventAttendance]);
+  }, [selectedTeam, lastEventAttendance, members]);
 
   // For admin: show only absent members (original behavior)
   // For area leaders: show all members with status
@@ -137,6 +164,14 @@ const FollowUp: React.FC = () => {
     }
     return <Badge className="bg-red-500/20 text-red-400 border-red-500/30"><AlertCircle className="w-3 h-3 mr-1" />Absent</Badge>;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -225,7 +260,7 @@ const FollowUp: React.FC = () => {
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-lg">
               {isAdmin 
-                ? `Absent Members - ${lastEvent?.name} (${displayMembers.length})`
+                ? `Absent Members - ${lastEvent?.name || 'No event'} (${displayMembers.length})`
                 : `Team Members - ${selectedTeam} (${displayMembers.length})`}
             </h3>
           </div>

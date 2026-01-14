@@ -1,31 +1,24 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged,
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { User, UserRole } from '@/types';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Mock users for demo
-const mockUsers: Record<string, { password: string; user: User }> = {
-  'admin@immanuelag.com': {
-    password: 'admin123',
-    user: { id: '1', email: 'admin@immanuelag.com', name: 'Admin User', role: 'admin' }
-  },
-  'marker@immanuelag.com': {
-    password: 'marker123',
-    user: { id: '2', email: 'marker@immanuelag.com', name: 'Marker User', role: 'marker' }
-  },
-  'leader@immanuelag.com': {
-    password: 'leader123',
-    user: { id: '3', email: 'leader@immanuelag.com', name: 'Area Leader', role: 'area_leader' }
-  }
-};
 
 // Role-based permissions
 const rolePermissions: Record<UserRole, string[]> = {
@@ -37,7 +30,7 @@ const rolePermissions: Record<UserRole, string[]> = {
     'attendance.view', 'attendance.mark',
     'reports.view', 'reports.export',
     'followup.view', 'followup.edit',
-    'teams.manage' // Admin can manage teams
+    'teams.manage'
   ],
   marker: [
     'dashboard.view',
@@ -55,24 +48,78 @@ const rolePermissions: Record<UserRole, string[]> = {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('iag_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    const mockUser = mockUsers[email.toLowerCase()];
-    if (mockUser && mockUser.password === password) {
-      setUser(mockUser.user);
-      localStorage.setItem('iag_user', JSON.stringify(mockUser.user));
-      return true;
-    }
-    return false;
+  // Listen to Firebase auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        // User is signed in, fetch their role from Firestore
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUser({
+              id: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: userData.name || firebaseUser.displayName || 'User',
+              role: userData.role as UserRole
+            });
+          } else {
+            // User document doesn't exist in Firestore
+            // This might happen if the user was created but not set up properly
+            console.warn('User document not found in Firestore');
+            setUser(null);
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    localStorage.removeItem('iag_user');
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+      
+      // Fetch user role from Firestore
+      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setUser({
+          id: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          name: userData.name || firebaseUser.displayName || 'User',
+          role: userData.role as UserRole
+        });
+        return true;
+      } else {
+        // User authenticated but no role document
+        console.error('User role not configured in Firestore');
+        await signOut(auth);
+        return false;
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   }, []);
 
   const hasPermission = useCallback((permission: string): boolean => {
@@ -84,6 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider value={{
       user,
       isAuthenticated: !!user,
+      isLoading,
       login,
       logout,
       hasPermission

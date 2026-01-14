@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { mockEvents, mockMembers, mockAttendance } from '@/data/mockData';
+import React, { useState, useMemo, useEffect } from 'react';
+import { getEvents, getMembers, getAttendance } from '@/services/firestore';
+import { ChurchEvent, Member, Attendance } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -18,34 +19,61 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { FileBarChart, Download, Users, UserCheck, UserX } from 'lucide-react';
+import { FileBarChart, Download, Users, UserCheck, UserX, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const Reports: React.FC = () => {
+  const [events, setEvents] = useState<ChurchEvent[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [reportType, setReportType] = useState<'present' | 'absent' | 'all'>('all');
 
-  const selectedEvent = mockEvents.find(e => e.id === selectedEventId);
+  // Fetch data from Firestore
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [eventsData, membersData, attendanceData] = await Promise.all([
+          getEvents(),
+          getMembers(),
+          getAttendance()
+        ]);
+        setEvents(eventsData);
+        setMembers(membersData);
+        setAttendance(attendanceData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const selectedEvent = events.find(e => e.id === selectedEventId);
 
   const reportData = useMemo(() => {
     if (!selectedEventId) return [];
 
     const eventAttendanceIds = new Set(
-      mockAttendance.filter(a => a.eventId === selectedEventId).map(a => a.memberId)
+      attendance.filter(a => a.eventId === selectedEventId).map(a => a.memberId)
     );
 
     switch (reportType) {
       case 'present':
-        return mockMembers.filter(m => eventAttendanceIds.has(m.id));
+        return members.filter(m => eventAttendanceIds.has(m.id));
       case 'absent':
-        return mockMembers.filter(m => !eventAttendanceIds.has(m.id));
+        return members.filter(m => !eventAttendanceIds.has(m.id));
       default:
-        return mockMembers.map(m => ({
+        return members.map(m => ({
           ...m,
           isPresent: eventAttendanceIds.has(m.id)
         }));
     }
-  }, [selectedEventId, reportType]);
+  }, [selectedEventId, reportType, members, attendance]);
 
   const handleExport = () => {
     const headers = ['Member ID', 'Name', 'Phone', 'Team', 'Status'];
@@ -72,10 +100,18 @@ const Reports: React.FC = () => {
 
   const presentCount = useMemo(() => {
     if (!selectedEventId) return 0;
-    return mockAttendance.filter(a => a.eventId === selectedEventId).length;
-  }, [selectedEventId]);
+    return attendance.filter(a => a.eventId === selectedEventId).length;
+  }, [selectedEventId, attendance]);
 
-  const absentCount = mockMembers.length - presentCount;
+  const absentCount = members.length - presentCount;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -95,7 +131,7 @@ const Reports: React.FC = () => {
                 <SelectValue placeholder="Choose an event..." />
               </SelectTrigger>
               <SelectContent>
-                {mockEvents.map(event => (
+                {events.map(event => (
                   <SelectItem key={event.id} value={event.id}>
                     {event.name} - {format(new Date(event.date), 'MMM dd, yyyy')}
                   </SelectItem>
@@ -150,7 +186,7 @@ const Reports: React.FC = () => {
       {selectedEventId && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in [animation-delay:200ms]">
           <div className="glass rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-foreground">{mockMembers.length}</p>
+            <p className="text-3xl font-bold text-foreground">{members.length}</p>
             <p className="text-sm text-muted-foreground">Total Members</p>
           </div>
           <div className="glass rounded-xl p-4 text-center border-emerald-500/30">

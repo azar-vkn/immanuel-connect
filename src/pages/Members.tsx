@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { mockMembers } from '@/data/mockData';
+import React, { useState, useMemo, useEffect } from 'react';
+import { getMembers, createMember, updateMember, deleteMember } from '@/services/firestore';
+import { teams } from '@/data/mockData';
 import { Member } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -43,7 +44,8 @@ import {
   Trash2,
   CreditCard,
   Filter,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { MemberForm } from '@/components/members/MemberForm';
 import { MemberIDCard } from '@/components/members/MemberIDCard';
@@ -59,7 +61,8 @@ interface Filters {
 
 const Members: React.FC = () => {
   const { hasPermission } = useAuth();
-  const [members, setMembers] = useState<Member[]>(mockMembers);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -74,10 +77,26 @@ const Members: React.FC = () => {
   });
   const [showFilters, setShowFilters] = useState(false);
 
-  // Get unique teams from members
-  const teams = useMemo(() => {
+  // Fetch members from Firestore
+  useEffect(() => {
+    const fetchMembers = async () => {
+      try {
+        const data = await getMembers();
+        setMembers(data);
+      } catch (error) {
+        console.error('Error fetching members:', error);
+        toast.error('Failed to load members');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMembers();
+  }, []);
+
+  // Get unique teams from members or fallback to static teams
+  const memberTeams = useMemo(() => {
     const uniqueTeams = new Set(members.map(m => m.team).filter(Boolean));
-    return Array.from(uniqueTeams);
+    return uniqueTeams.size > 0 ? Array.from(uniqueTeams) : teams;
   }, [members]);
 
   // Calculate age from DOB
@@ -147,10 +166,16 @@ const Members: React.FC = () => {
   const canDelete = hasPermission('members.delete');
   const canCreate = hasPermission('members.create');
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this member?')) {
-      setMembers(members.filter((m) => m.id !== id));
-      toast.success('Member deleted successfully');
+      try {
+        await deleteMember(id);
+        setMembers(members.filter((m) => m.id !== id));
+        toast.success('Member deleted successfully');
+      } catch (error) {
+        console.error('Error deleting member:', error);
+        toast.error('Failed to delete member');
+      }
     }
   };
 
@@ -164,12 +189,38 @@ const Members: React.FC = () => {
     setShowEditDialog(true);
   };
 
-  const handleSaveEdit = (updatedMember: Member) => {
-    setMembers(members.map(m => m.id === updatedMember.id ? updatedMember : m));
-    setShowEditDialog(false);
-    setSelectedMember(null);
-    toast.success('Member updated successfully');
+  const handleSaveEdit = async (updatedMember: Member) => {
+    try {
+      await updateMember(updatedMember.id, updatedMember);
+      setMembers(members.map(m => m.id === updatedMember.id ? updatedMember : m));
+      setShowEditDialog(false);
+      setSelectedMember(null);
+      toast.success('Member updated successfully');
+    } catch (error) {
+      console.error('Error updating member:', error);
+      toast.error('Failed to update member');
+    }
   };
+
+  const handleAddMember = async (member: Member) => {
+    try {
+      const id = await createMember(member);
+      setMembers([...members, { ...member, id }]);
+      setShowAddModal(false);
+      toast.success('Member added successfully');
+    } catch (error) {
+      console.error('Error adding member:', error);
+      toast.error('Failed to add member');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -205,11 +256,7 @@ const Members: React.FC = () => {
                   <DialogTitle className="font-serif text-xl">Add New Member</DialogTitle>
                 </DialogHeader>
                 <MemberForm 
-                  onSave={(member) => {
-                    setMembers([...members, member]);
-                    setShowAddModal(false);
-                    toast.success('Member added successfully');
-                  }}
+                  onSave={handleAddMember}
                   onCancel={() => setShowAddModal(false)}
                 />
               </DialogContent>
@@ -270,7 +317,7 @@ const Members: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Teams</SelectItem>
-                    {teams.map(team => (
+                    {memberTeams.map(team => (
                       <SelectItem key={team} value={team!}>{team}</SelectItem>
                     ))}
                   </SelectContent>
@@ -401,93 +448,95 @@ const Members: React.FC = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredMembers.map((member) => (
-              <TableRow key={member.id} className="border-border/30 hover:bg-secondary/30">
-                <TableCell className="font-mono text-sm text-primary">
-                  {member.memberId}
-                </TableCell>
-                <TableCell className="font-medium">{member.name}</TableCell>
-                <TableCell className="text-muted-foreground">{member.phone}</TableCell>
-                <TableCell>
-                  {member.team && (
-                    <Badge variant="outline" className="bg-secondary/50">
-                      {member.team}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="capitalize text-muted-foreground">
-                  {member.churchRole}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={
-                      member.baptismStatus === 'baptized'
-                        ? 'badge-success'
-                        : 'badge-warning'
-                    }
-                  >
-                    {member.baptismStatus === 'baptized' ? 'Baptized' : 'Not Baptized'}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-primary"
-                      onClick={() => {
-                        setSelectedMember(member);
-                        setShowIdCard(true);
-                      }}
-                    >
-                      <CreditCard className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => handleView(member)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    {canEdit && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-blue-400"
-                        onClick={() => handleEdit(member)}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {canDelete && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDelete(member.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
+            {filteredMembers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                  {members.length === 0 ? 'No members found. Add your first member!' : 'No members match your filters.'}
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              filteredMembers.map((member) => (
+                <TableRow key={member.id} className="border-border/30 hover:bg-secondary/30">
+                  <TableCell className="font-mono text-sm text-primary">
+                    {member.memberId}
+                  </TableCell>
+                  <TableCell className="font-medium">{member.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{member.phone}</TableCell>
+                  <TableCell>
+                    {member.team && (
+                      <Badge variant="outline" className="bg-secondary/50">
+                        {member.team}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="capitalize text-muted-foreground">
+                    {member.churchRole}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        member.baptismStatus === 'baptized'
+                          ? 'badge-success'
+                          : 'badge-warning'
+                      }
+                    >
+                      {member.baptismStatus === 'baptized' ? 'Baptized' : 'Not Baptized'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                        onClick={() => {
+                          setSelectedMember(member);
+                          setShowIdCard(true);
+                        }}
+                      >
+                        <CreditCard className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => handleView(member)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-blue-400"
+                          onClick={() => handleEdit(member)}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDelete(member.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
-
-        {filteredMembers.length === 0 && (
-          <div className="p-12 text-center text-muted-foreground">
-            No members found matching your search.
-          </div>
-        )}
       </div>
 
       {/* ID Card Dialog */}
       <Dialog open={showIdCard} onOpenChange={setShowIdCard}>
-        <DialogContent className="max-w-md glass">
+        <DialogContent className="max-w-lg glass">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl">Member ID Card</DialogTitle>
           </DialogHeader>
@@ -495,24 +544,27 @@ const Members: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* View Member Dialog */}
+      {/* View Dialog */}
       <MemberViewDialog
         member={selectedMember}
         open={showViewDialog}
         onOpenChange={setShowViewDialog}
       />
 
-      {/* Edit Member Dialog */}
+      {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto glass">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl">Edit Member</DialogTitle>
           </DialogHeader>
           {selectedMember && (
-            <MemberForm
-              member={selectedMember}
+            <MemberForm 
+              initialData={selectedMember}
               onSave={handleSaveEdit}
-              onCancel={() => setShowEditDialog(false)}
+              onCancel={() => {
+                setShowEditDialog(false);
+                setSelectedMember(null);
+              }}
             />
           )}
         </DialogContent>

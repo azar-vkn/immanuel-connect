@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Team } from '@/types/team';
-import { mockMembers } from '@/data/mockData';
+import { getMembers } from '@/services/firestore';
+import { Member } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,9 +34,25 @@ export const TeamManagementDialog: React.FC<TeamManagementDialogProps> = ({
   onTeamsChange,
 }) => {
   const [open, setOpen] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
   const [newTeamName, setNewTeamName] = useState('');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [selectedLeader, setSelectedLeader] = useState<string>('');
+
+  // Fetch members when dialog opens
+  useEffect(() => {
+    if (open) {
+      const fetchMembers = async () => {
+        try {
+          const data = await getMembers();
+          setMembers(data);
+        } catch (error) {
+          console.error('Error fetching members:', error);
+        }
+      };
+      fetchMembers();
+    }
+  }, [open]);
 
   const handleAddTeam = () => {
     if (!newTeamName.trim()) {
@@ -65,7 +82,7 @@ export const TeamManagementDialog: React.FC<TeamManagementDialogProps> = ({
     const team = teams.find(t => t.id === teamId);
     if (!team) return;
 
-    const membersInTeam = mockMembers.filter(m => m.team === team.name);
+    const membersInTeam = members.filter(m => m.team === team.name);
     if (membersInTeam.length > 0) {
       toast.error(`Cannot delete team with ${membersInTeam.length} member(s) assigned`);
       return;
@@ -117,10 +134,10 @@ export const TeamManagementDialog: React.FC<TeamManagementDialogProps> = ({
   };
 
   const getMemberName = (memberId: string) => {
-    return mockMembers.find(m => m.id === memberId)?.name || 'Unknown';
+    return members.find(m => m.id === memberId)?.name || 'Unknown';
   };
 
-  const availableLeaders = mockMembers.filter(m => 
+  const availableLeaders = members.filter(m => 
     m.churchRole === 'volunteer' || m.churchRole === 'host' || m.churchRole === 'operator'
   );
 
@@ -166,7 +183,7 @@ export const TeamManagementDialog: React.FC<TeamManagementDialogProps> = ({
             </div>
           ) : (
             teams.map((team) => {
-              const memberCount = mockMembers.filter(m => m.team === team.name).length;
+              const memberCount = members.filter(m => m.team === team.name).length;
               
               return (
                 <div key={team.id} className="glass rounded-xl p-4 space-y-3">

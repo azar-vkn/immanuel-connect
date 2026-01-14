@@ -1,15 +1,75 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { BirthdayCard } from '@/components/dashboard/BirthdayCard';
-import { getDashboardStats, mockEvents } from '@/data/mockData';
-import { Users, UserCheck, Calendar, TrendingUp } from 'lucide-react';
-import { format } from 'date-fns';
+import { getMembers, getEvents, getAttendance } from '@/services/firestore';
+import { Member, ChurchEvent, Attendance } from '@/types';
+import { Users, UserCheck, Calendar, TrendingUp, Loader2 } from 'lucide-react';
+import { format, addDays, subDays } from 'date-fns';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
-  const stats = getDashboardStats();
-  const lastEvent = mockEvents[0];
+  const [members, setMembers] = useState<Member[]>([]);
+  const [events, setEvents] = useState<ChurchEvent[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch data from Firestore
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [membersData, eventsData, attendanceData] = await Promise.all([
+          getMembers(),
+          getEvents(),
+          getAttendance()
+        ]);
+        setMembers(membersData);
+        setEvents(eventsData);
+        setAttendance(attendanceData);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Calculate stats
+  const lastEvent = events[0];
+  const lastEventAttendance = lastEvent 
+    ? attendance.filter(a => a.eventId === lastEvent.id).length 
+    : 0;
+
+  const today = new Date();
+  const thisWeekStart = subDays(today, today.getDay());
+  const weekEnd = addDays(thisWeekStart, 7);
+
+  const birthdaysThisWeek = members.filter(m => {
+    if (!m.dob) return false;
+    const dob = new Date(m.dob);
+    const dobThisYear = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+    return dobThisYear >= thisWeekStart && dobThisYear < weekEnd;
+  });
+
+  const anniversariesThisWeek = members.filter(m => {
+    if (!m.anniversaryDate) return false;
+    const anniv = new Date(m.anniversaryDate);
+    const annivThisYear = new Date(today.getFullYear(), anniv.getMonth(), anniv.getDate());
+    return annivThisYear >= thisWeekStart && annivThisYear < weekEnd;
+  });
+
+  const attendanceRate = members.length > 0 
+    ? Math.round((lastEventAttendance / members.length) * 100) 
+    : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -27,28 +87,28 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Members"
-          value={stats.totalMembers}
+          value={members.length}
           icon={Users}
           description="Registered members"
           className="[animation-delay:100ms]"
         />
         <StatCard
           title="Present Last Event"
-          value={stats.presentLastEvent}
+          value={lastEventAttendance}
           icon={UserCheck}
           description={lastEvent ? format(new Date(lastEvent.date), 'MMM dd, yyyy') : 'No events'}
           className="[animation-delay:200ms]"
         />
         <StatCard
           title="Birthdays This Week"
-          value={stats.birthdaysThisWeek.length}
+          value={birthdaysThisWeek.length}
           icon={Calendar}
           description="Celebrations ahead"
           className="[animation-delay:300ms]"
         />
         <StatCard
           title="Attendance Rate"
-          value={`${Math.round((stats.presentLastEvent / stats.totalMembers) * 100)}%`}
+          value={`${attendanceRate}%`}
           icon={TrendingUp}
           description="Last event"
           trend={{ value: 5, isPositive: true }}
@@ -59,11 +119,11 @@ const Dashboard: React.FC = () => {
       {/* Birthday & Anniversary Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <BirthdayCard 
-          members={stats.birthdaysThisWeek} 
+          members={birthdaysThisWeek} 
           type="birthday" 
         />
         <BirthdayCard 
-          members={stats.anniversariesThisWeek} 
+          members={anniversariesThisWeek} 
           type="anniversary" 
         />
       </div>

@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { mockEvents, mockMembers, mockAttendance } from '@/data/mockData';
-import { Attendance as AttendanceType, Member } from '@/types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { getEvents, getMembers, getAttendance, markAttendance, deleteAttendance } from '@/services/firestore';
+import { Attendance as AttendanceType, Member, ChurchEvent } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,20 +13,46 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, UserCheck, UserX, CheckCircle2, X } from 'lucide-react';
+import { Search, UserCheck, UserX, CheckCircle2, X, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 const Attendance: React.FC = () => {
   const { user, hasPermission } = useAuth();
+  const [events, setEvents] = useState<ChurchEvent[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceType[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
-  const [attendance, setAttendance] = useState<AttendanceType[]>(mockAttendance);
   const [searchName, setSearchName] = useState('');
   const [searchId, setSearchId] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
 
   const canMark = hasPermission('attendance.mark');
-  const selectedEvent = mockEvents.find(e => e.id === selectedEventId);
+
+  // Fetch data from Firestore
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [eventsData, membersData, attendanceData] = await Promise.all([
+          getEvents(),
+          getMembers(),
+          getAttendance()
+        ]);
+        setEvents(eventsData);
+        setMembers(membersData);
+        setAttendance(attendanceData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const selectedEvent = events.find(e => e.id === selectedEventId);
 
   const eventAttendance = useMemo(() => {
     return attendance.filter(a => a.eventId === selectedEventId);
@@ -42,44 +68,67 @@ const Attendance: React.FC = () => {
     const query = searchName.toLowerCase() || searchId.toLowerCase() || searchPhone;
     if (!query) return [];
 
-    return mockMembers.filter(m => {
+    return members.filter(m => {
       if (searchName && m.name.toLowerCase().includes(searchName.toLowerCase())) return true;
       if (searchId && m.memberId.toLowerCase().includes(searchId.toLowerCase())) return true;
       if (searchPhone && m.phone.includes(searchPhone)) return true;
       return false;
     }).slice(0, 10);
-  }, [selectedEventId, searchName, searchId, searchPhone]);
+  }, [selectedEventId, searchName, searchId, searchPhone, members]);
 
-  const handleMarkAttendance = (member: Member) => {
+  const handleMarkAttendance = async (member: Member) => {
     if (markedMemberIds.has(member.id)) {
       toast.info(`${member.name} is already marked present`);
       return;
     }
 
-    const newAttendance: AttendanceType = {
-      id: crypto.randomUUID(),
-      eventId: selectedEventId,
-      memberId: member.id,
-      markedAt: new Date().toISOString(),
-      markedBy: user?.id || 'unknown'
-    };
+    try {
+      const newAttendanceData = {
+        eventId: selectedEventId,
+        memberId: member.id,
+        markedAt: new Date().toISOString(),
+        markedBy: user?.id || 'unknown'
+      };
 
-    setAttendance([...attendance, newAttendance]);
-    toast.success(`Marked ${member.name} as present`);
+      const id = await markAttendance(newAttendanceData);
+      setAttendance([...attendance, { id, ...newAttendanceData }]);
+      toast.success(`Marked ${member.name} as present`);
+      
+      // Clear search fields
+      setSearchName('');
+      setSearchId('');
+      setSearchPhone('');
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      toast.error('Failed to mark attendance');
+    }
+  };
+
+  const handleRemoveAttendance = async (memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    const attendanceRecord = attendance.find(a => a.eventId === selectedEventId && a.memberId === memberId);
     
-    // Clear search fields
-    setSearchName('');
-    setSearchId('');
-    setSearchPhone('');
+    if (!attendanceRecord) return;
+
+    try {
+      await deleteAttendance(attendanceRecord.id);
+      setAttendance(attendance.filter(a => !(a.eventId === selectedEventId && a.memberId === memberId)));
+      toast.success(`Removed attendance for ${member?.name}`);
+    } catch (error) {
+      console.error('Error removing attendance:', error);
+      toast.error('Failed to remove attendance');
+    }
   };
 
-  const handleRemoveAttendance = (memberId: string) => {
-    const member = mockMembers.find(m => m.id === memberId);
-    setAttendance(attendance.filter(a => !(a.eventId === selectedEventId && a.memberId === memberId)));
-    toast.success(`Removed attendance for ${member?.name}`);
-  };
+  const presentMembers = members.filter(m => markedMemberIds.has(m.id));
 
-  const presentMembers = mockMembers.filter(m => markedMemberIds.has(m.id));
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -97,7 +146,7 @@ const Attendance: React.FC = () => {
             <SelectValue placeholder="Choose an event..." />
           </SelectTrigger>
           <SelectContent>
-            {mockEvents.map(event => (
+            {events.map(event => (
               <SelectItem key={event.id} value={event.id}>
                 {event.name} - {format(new Date(event.date), 'MMM dd, yyyy')}
               </SelectItem>

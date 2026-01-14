@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { mockEvents } from '@/data/mockData';
+import React, { useState, useEffect } from 'react';
+import { getEvents, createEvent, updateEvent, deleteEvent as deleteFirestoreEvent } from '@/services/firestore';
 import { ChurchEvent } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -13,12 +13,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Calendar, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Calendar, Edit2, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const Events: React.FC = () => {
   const { hasPermission } = useAuth();
-  const [events, setEvents] = useState<ChurchEvent[]>(mockEvents);
+  const [events, setEvents] = useState<ChurchEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<ChurchEvent | null>(null);
   const [formData, setFormData] = useState({
@@ -30,29 +32,53 @@ const Events: React.FC = () => {
   const canCreate = hasPermission('events.create');
   const canEdit = hasPermission('events.edit');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Fetch events from Firestore
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const data = await getEvents();
+        setEvents(data);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+        toast.error('Failed to load events');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEvents();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingEvent) {
-      setEvents(events.map(ev => 
-        ev.id === editingEvent.id 
-          ? { ...ev, ...formData }
-          : ev
-      ));
-    } else {
-      const newEvent: ChurchEvent = {
-        id: crypto.randomUUID(),
-        name: formData.name,
-        date: formData.date,
-        description: formData.description,
-        createdAt: new Date().toISOString()
-      };
-      setEvents([newEvent, ...events]);
-    }
+    try {
+      if (editingEvent) {
+        await updateEvent(editingEvent.id, formData);
+        setEvents(events.map(ev => 
+          ev.id === editingEvent.id 
+            ? { ...ev, ...formData }
+            : ev
+        ));
+        toast.success('Event updated successfully');
+      } else {
+        const newEventData = {
+          name: formData.name,
+          date: formData.date,
+          description: formData.description,
+          createdAt: new Date().toISOString().split('T')[0]
+        };
+        const id = await createEvent(newEventData);
+        setEvents([{ id, ...newEventData }, ...events]);
+        toast.success('Event created successfully');
+      }
 
-    setFormData({ name: '', date: '', description: '' });
-    setEditingEvent(null);
-    setShowAddModal(false);
+      setFormData({ name: '', date: '', description: '' });
+      setEditingEvent(null);
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('Error saving event:', error);
+      toast.error('Failed to save event');
+    }
   };
 
   const handleEdit = (event: ChurchEvent) => {
@@ -65,11 +91,26 @@ const Events: React.FC = () => {
     setShowAddModal(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this event?')) {
-      setEvents(events.filter(ev => ev.id !== id));
+      try {
+        await deleteFirestoreEvent(id);
+        setEvents(events.filter(ev => ev.id !== id));
+        toast.success('Event deleted successfully');
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        toast.error('Failed to delete event');
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

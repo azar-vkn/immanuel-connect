@@ -559,6 +559,7 @@ const Members: React.FC = () => {
           </DialogHeader>
           {selectedMember && (
             <MemberForm 
+              member={selectedMember}
               initialData={selectedMember}
               onSave={handleSaveEdit}
               onCancel={() => {

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Member } from '@/types';
+import React, { useState, useEffect } from 'react';
+import { Member, MemberStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { teams } from '@/data/mockData';
+import { getMembers } from '@/services/firestore';
 
 interface MemberFormProps {
   member?: Member;
@@ -38,20 +39,43 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     baptismDate: member?.baptismDate || '',
     churchRole: member?.churchRole || 'attendee',
     team: member?.team || '',
+    status: member?.status || 'regular',
     remarks: member?.remarks || '',
   });
 
-  const generateMemberId = (): string => {
-    const randomNum = Math.floor(Math.random() * 99999).toString().padStart(5, '0');
-    return `IAG${randomNum}`;
-  };
+  const [nextMemberId, setNextMemberId] = useState<string>('IAG00001');
+
+  useEffect(() => {
+    const fetchNextMemberId = async () => {
+      if (!member) {
+        try {
+          const existingMembers = await getMembers();
+          // Extract numbers from existing member IDs and find the max
+          const memberNumbers = existingMembers
+            .map(m => {
+              const match = m.memberId?.match(/IAG(\d+)/);
+              return match ? parseInt(match[1], 10) : 0;
+            })
+            .filter(n => !isNaN(n));
+          
+          const maxNumber = memberNumbers.length > 0 ? Math.max(...memberNumbers) : 0;
+          const nextNumber = maxNumber + 1;
+          setNextMemberId(`IAG${nextNumber.toString().padStart(5, '0')}`);
+        } catch (error) {
+          console.error('Error fetching members for ID generation:', error);
+          setNextMemberId('IAG00001');
+        }
+      }
+    };
+    fetchNextMemberId();
+  }, [member]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     const newMember: Member = {
       id: member?.id || crypto.randomUUID(),
-      memberId: member?.memberId || generateMemberId(),
+      memberId: member?.memberId || nextMemberId,
       name: formData.name,
       dob: formData.dob,
       gender: formData.gender as 'male' | 'female',
@@ -71,6 +95,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
       baptismDate: formData.baptismDate || undefined,
       churchRole: formData.churchRole as Member['churchRole'],
       team: formData.team || undefined,
+      status: formData.status as MemberStatus,
       remarks: formData.remarks || undefined,
       createdAt: member?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -284,6 +309,22 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
                     {team}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="status">Member Status</Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value: MemberStatus) => setFormData({ ...formData, status: value })}
+            >
+              <SelectTrigger className="bg-secondary/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="regular">Regular</SelectItem>
+                <SelectItem value="long_absent">Long Absent</SelectItem>
+                <SelectItem value="occasional_visitor">Occasional Visitor</SelectItem>
               </SelectContent>
             </Select>
           </div>

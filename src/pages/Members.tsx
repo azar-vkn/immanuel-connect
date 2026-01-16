@@ -560,7 +560,6 @@ const Members: React.FC = () => {
           {selectedMember && (
             <MemberForm 
               member={selectedMember}
-              initialData={selectedMember}
               onSave={handleSaveEdit}
               onCancel={() => {
                 setShowEditDialog(false);

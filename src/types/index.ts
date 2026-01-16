@@ -7,9 +7,11 @@ export interface User {
   role: UserRole;
 }
 
+export type MemberStatus = 'regular' | 'long_absent' | 'occasional_visitor';
+
 export interface Member {
   id: string;
-  memberId: string; // IAG00323 format
+  memberId: string; // IAG00001 format
   name: string;
   dob: string;
   gender: 'male' | 'female';
@@ -32,6 +34,7 @@ export interface Member {
   baptismDate?: string;
   churchRole: 'attendee' | 'volunteer' | 'host' | 'operator';
   team?: string;
+  status: MemberStatus;
   remarks?: string;
   createdAt: string;
   updatedAt: string;

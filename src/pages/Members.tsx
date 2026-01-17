@@ -45,7 +45,10 @@ import {
   CreditCard,
   Filter,
   X,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  Users
 } from 'lucide-react';
 import { MemberForm } from '@/components/members/MemberForm';
 import { MemberIDCard } from '@/components/members/MemberIDCard';
@@ -76,6 +79,7 @@ const Members: React.FC = () => {
     churchRole: ''
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
 
   // Fetch members from Firestore
   useEffect(() => {
@@ -161,6 +165,59 @@ const Members: React.FC = () => {
       return true;
     });
   }, [members, searchQuery, filters]);
+
+  // Group members by family
+  const groupedMembers = useMemo(() => {
+    const familyMap = new Map<string, Member[]>();
+    
+    filteredMembers.forEach(member => {
+      // Use familyId if available, otherwise treat the member as a single-member family
+      const familyId = member.familyId || member.memberId;
+      if (!familyMap.has(familyId)) {
+        familyMap.set(familyId, []);
+      }
+      familyMap.get(familyId)!.push(member);
+    });
+    
+    // Sort each family: head first, then by memberId
+    familyMap.forEach((familyMembers, familyId) => {
+      familyMembers.sort((a, b) => {
+        if (a.isHeadOfFamily && !b.isHeadOfFamily) return -1;
+        if (!a.isHeadOfFamily && b.isHeadOfFamily) return 1;
+        return a.memberId.localeCompare(b.memberId);
+      });
+    });
+    
+    // Convert to array and sort by head's name
+    return Array.from(familyMap.entries())
+      .map(([familyId, familyMembers]) => ({
+        familyId,
+        head: familyMembers.find(m => m.isHeadOfFamily) || familyMembers[0],
+        members: familyMembers,
+        memberCount: familyMembers.length
+      }))
+      .sort((a, b) => a.head.name.localeCompare(b.head.name));
+  }, [filteredMembers]);
+
+  const toggleFamilyExpansion = (familyId: string) => {
+    setExpandedFamilies(prev => {
+      const next = new Set(prev);
+      if (next.has(familyId)) {
+        next.delete(familyId);
+      } else {
+        next.add(familyId);
+      }
+      return next;
+    });
+  };
+
+  const expandAllFamilies = () => {
+    setExpandedFamilies(new Set(groupedMembers.map(g => g.familyId)));
+  };
+
+  const collapseAllFamilies = () => {
+    setExpandedFamilies(new Set());
+  };
 
   const canEdit = hasPermission('members.edit');
   const canDelete = hasPermission('members.delete');
@@ -329,6 +386,11 @@ const Members: React.FC = () => {
                     const results = await Promise.allSettled(
                       validRows.map(async (r) => {
                         const memberId = (r.memberId ?? '').trim() || `IAG${String(nextNumber++).padStart(5, '0')}`;
+                        // For imported members, treat them as family heads by default
+                        const familyId = (r.familyId ?? '').trim() || memberId.split('-')[0];
+                        const isHeadOfFamily = (r.isHeadOfFamily ?? '').trim().toLowerCase() === 'true' || !memberId.includes('-');
+                        const relationship = ((r.relationship ?? 'Head').trim() || 'Head') as any;
+                        
                         const member: Member = {
                           id: crypto.randomUUID(),
                           memberId,
@@ -344,7 +406,9 @@ const Members: React.FC = () => {
                             country: (r.country ?? 'India').trim(),
                             pincode: (r.pincode ?? '').trim(),
                           },
-                          memberType: (((r.memberType ?? 'individual').trim() || 'individual') as any),
+                          familyId,
+                          isHeadOfFamily,
+                          relationship,
                           maritalStatus: (((r.maritalStatus ?? 'single').trim() || 'single') as any),
                           anniversaryDate: (r.anniversaryDate ?? '').trim() || undefined,
                           baptismStatus: (((r.baptismStatus ?? 'not_baptized').trim() || 'not_baptized') as any),
@@ -402,7 +466,8 @@ const Members: React.FC = () => {
                   const headers = [
                     'memberId','name','dob','gender','phone',
                     'place','city','district','state','country','pincode',
-                    'memberType','maritalStatus','anniversaryDate','baptismStatus','baptismDate',
+                    'familyId','isHeadOfFamily','relationship',
+                    'maritalStatus','anniversaryDate','baptismStatus','baptismDate',
                     'churchRole','team','status','remarks'
                   ];
                   const rows = members.map(m => [
@@ -417,7 +482,9 @@ const Members: React.FC = () => {
                     m.address?.state || '',
                     m.address?.country || '',
                     m.address?.pincode || '',
-                    m.memberType,
+                    m.familyId || m.memberId,
+                    String(m.isHeadOfFamily ?? true),
+                    m.relationship || 'Head',
                     m.maritalStatus,
                     m.anniversaryDate || '',
                     m.baptismStatus,
@@ -626,102 +693,232 @@ const Members: React.FC = () => {
         </div>
       )}
 
-      {/* Members Table */}
+      {/* Members Table - Grouped by Family */}
       <div className="glass rounded-xl overflow-hidden animate-fade-in [animation-delay:200ms]">
+        {/* Expand/Collapse Controls */}
+        <div className="flex justify-end gap-2 p-3 border-b border-border/30">
+          <Button variant="ghost" size="sm" onClick={expandAllFamilies} className="text-xs">
+            Expand All
+          </Button>
+          <Button variant="ghost" size="sm" onClick={collapseAllFamilies} className="text-xs">
+            Collapse All
+          </Button>
+        </div>
+        
         <Table>
           <TableHeader>
             <TableRow className="border-border/50 hover:bg-transparent">
+              <TableHead className="text-muted-foreground w-10"></TableHead>
               <TableHead className="text-muted-foreground">Member ID</TableHead>
               <TableHead className="text-muted-foreground">Name</TableHead>
+              <TableHead className="text-muted-foreground">Relationship</TableHead>
               <TableHead className="text-muted-foreground">Phone</TableHead>
               <TableHead className="text-muted-foreground">Team</TableHead>
-              <TableHead className="text-muted-foreground">Role</TableHead>
               <TableHead className="text-muted-foreground">Status</TableHead>
               <TableHead className="text-muted-foreground text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredMembers.length === 0 ? (
+            {groupedMembers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   {members.length === 0 ? 'No members found. Add your first member!' : 'No members match your filters.'}
                 </TableCell>
               </TableRow>
             ) : (
-              filteredMembers.map((member) => (
-                <TableRow key={member.id} className="border-border/30 hover:bg-secondary/30">
-                  <TableCell className="font-mono text-sm text-primary">
-                    {member.memberId}
-                  </TableCell>
-                  <TableCell className="font-medium">{member.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{member.phone}</TableCell>
-                  <TableCell>
-                    {member.team && (
-                      <Badge variant="outline" className="bg-secondary/50">
-                        {member.team}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="capitalize text-muted-foreground">
-                    {member.churchRole}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={
-                        member.baptismStatus === 'baptized'
-                          ? 'badge-success'
-                          : 'badge-warning'
-                      }
+              groupedMembers.map((family) => {
+                const isExpanded = expandedFamilies.has(family.familyId);
+                const hasMultipleMembers = family.memberCount > 1;
+                
+                return (
+                  <React.Fragment key={family.familyId}>
+                    {/* Family Head Row */}
+                    <TableRow 
+                      className={`border-border/30 hover:bg-secondary/30 ${hasMultipleMembers ? 'cursor-pointer' : ''}`}
+                      onClick={() => hasMultipleMembers && toggleFamilyExpansion(family.familyId)}
                     >
-                      {member.baptismStatus === 'baptized' ? 'Baptized' : 'Not Baptized'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-primary"
-                        onClick={() => {
-                          setSelectedMember(member);
-                          setShowIdCard(true);
-                        }}
-                      >
-                        <CreditCard className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleView(member)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      {canEdit && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-blue-400"
-                          onClick={() => handleEdit(member)}
+                      <TableCell className="w-10">
+                        {hasMultipleMembers ? (
+                          <div className="flex items-center gap-1">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                            )}
+                            <Badge variant="secondary" className="text-xs px-1.5">
+                              <Users className="w-3 h-3 mr-1" />
+                              {family.memberCount}
+                            </Badge>
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm text-primary">
+                        {family.head.memberId}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {family.head.name}
+                        {family.head.isHeadOfFamily && (
+                          <Badge variant="outline" className="ml-2 text-xs bg-primary/10 text-primary border-primary/20">
+                            Head
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {family.head.relationship || 'Head'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{family.head.phone}</TableCell>
+                      <TableCell>
+                        {family.head.team && (
+                          <Badge variant="outline" className="bg-secondary/50">
+                            {family.head.team}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            family.head.baptismStatus === 'baptized'
+                              ? 'badge-success'
+                              : 'badge-warning'
+                          }
                         >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDelete(member.id)}
+                          {family.head.baptismStatus === 'baptized' ? 'Baptized' : 'Not Baptized'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            onClick={() => {
+                              setSelectedMember(family.head);
+                              setShowIdCard(true);
+                            }}
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => handleView(family.head)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-blue-400"
+                              onClick={() => handleEdit(family.head)}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDelete(family.head.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    
+                    {/* Family Members (Expandable) */}
+                    {isExpanded && family.members
+                      .filter(m => m.id !== family.head.id)
+                      .map((member) => (
+                        <TableRow 
+                          key={member.id} 
+                          className="border-border/30 bg-secondary/20 hover:bg-secondary/40"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                          <TableCell className="w-10">
+                            <div className="ml-4 border-l-2 border-border/50 h-4" />
+                          </TableCell>
+                          <TableCell className="font-mono text-sm text-primary/80">
+                            {member.memberId}
+                          </TableCell>
+                          <TableCell className="font-medium text-foreground/90">
+                            {member.name}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {member.relationship || '-'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{member.phone}</TableCell>
+                          <TableCell>
+                            {member.team && (
+                              <Badge variant="outline" className="bg-secondary/50">
+                                {member.team}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                member.baptismStatus === 'baptized'
+                                  ? 'badge-success'
+                                  : 'badge-warning'
+                              }
+                            >
+                              {member.baptismStatus === 'baptized' ? 'Baptized' : 'Not Baptized'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                onClick={() => {
+                                  setSelectedMember(member);
+                                  setShowIdCard(true);
+                                }}
+                              >
+                                <CreditCard className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => handleView(member)}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              {canEdit && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-blue-400"
+                                  onClick={() => handleEdit(member)}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {canDelete && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleDelete(member.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </React.Fragment>
+                );
+              })
             )}
           </TableBody>
         </Table>

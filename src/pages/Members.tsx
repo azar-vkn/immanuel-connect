@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { getMembers, createMember, updateMember, deleteMember } from '@/services/firestore';
 import { teams } from '@/data/mockData';
 import { Member } from '@/types';
@@ -166,6 +166,71 @@ const Members: React.FC = () => {
   const canDelete = hasPermission('members.delete');
   const canCreate = hasPermission('members.create');
 
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  const getErrorMessage = (err: unknown) => {
+    if (err instanceof Error) return err.message;
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  };
+
+  const parseCsv = (text: string): Record<string, string>[] => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length < 2) return [];
+
+    const parseLine = (line: string) => {
+      // Basic CSV parser handling quotes.
+      const out: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          out.push(cur);
+          cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      out.push(cur);
+      return out.map(v => v.trim());
+    };
+
+    const headers = parseLine(lines[0]).map(h => h.replace(/^\uFEFF/, '').trim());
+    return lines.slice(1).map(line => {
+      const values = parseLine(line);
+      const row: Record<string, string> = {};
+      headers.forEach((h, idx) => {
+        row[h] = values[idx] ?? '';
+      });
+      return row;
+    });
+  };
+
+  const downloadCsv = (filename: string, headers: string[], rows: string[][]) => {
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this member?')) {
       try {
@@ -174,7 +239,7 @@ const Members: React.FC = () => {
         toast.success('Member deleted successfully');
       } catch (error) {
         console.error('Error deleting member:', error);
-        toast.error('Failed to delete member');
+        toast.error(`Failed to delete member: ${getErrorMessage(error)}`);
       }
     }
   };
@@ -198,7 +263,7 @@ const Members: React.FC = () => {
       toast.success('Member updated successfully');
     } catch (error) {
       console.error('Error updating member:', error);
-      toast.error('Failed to update member');
+      toast.error(`Failed to update member: ${getErrorMessage(error)}`);
     }
   };
 
@@ -210,10 +275,9 @@ const Members: React.FC = () => {
       toast.success('Member added successfully');
     } catch (error) {
       console.error('Error adding member:', error);
-      toast.error('Failed to add member');
+      toast.error(`Failed to add member: ${getErrorMessage(error)}`);
     }
   };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -233,11 +297,140 @@ const Members: React.FC = () => {
         <div className="flex gap-3">
           {hasPermission('members.export') && (
             <>
-              <Button variant="outline" size="sm" className="gap-2">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  try {
+                    const text = await file.text();
+                    const rows = parseCsv(text);
+
+                    // Expected headers (case-sensitive):
+                    // name,dob,gender,phone,place,city,district,state,country,pincode,memberType,maritalStatus,anniversaryDate,baptismStatus,baptismDate,churchRole,team,status,remarks,memberId(optional)
+                    const required = ['name', 'dob', 'gender', 'phone'];
+                    const validRows = rows.filter(r => required.every(k => (r[k] ?? '').trim().length > 0));
+
+                    if (validRows.length === 0) {
+                      toast.error('Import failed: CSV has no valid rows (needs name,dob,gender,phone)');
+                      return;
+                    }
+
+                    const existingNumbers = members
+                      .map(m => m.memberId?.match(/IAG(\d+)/))
+                      .map(match => (match ? parseInt(match[1], 10) : 0))
+                      .filter(n => !isNaN(n));
+                    let nextNumber = (existingNumbers.length ? Math.max(...existingNumbers) : 0) + 1;
+
+                    const results = await Promise.allSettled(
+                      validRows.map(async (r) => {
+                        const memberId = (r.memberId ?? '').trim() || `IAG${String(nextNumber++).padStart(5, '0')}`;
+                        const member: Member = {
+                          id: crypto.randomUUID(),
+                          memberId,
+                          name: (r.name ?? '').trim(),
+                          dob: (r.dob ?? '').trim(),
+                          gender: ((r.gender ?? '').trim().toLowerCase() === 'female' ? 'female' : 'male') as any,
+                          phone: (r.phone ?? '').trim(),
+                          address: {
+                            place: (r.place ?? '').trim(),
+                            city: (r.city ?? '').trim(),
+                            district: (r.district ?? '').trim(),
+                            state: (r.state ?? '').trim(),
+                            country: (r.country ?? 'India').trim(),
+                            pincode: (r.pincode ?? '').trim(),
+                          },
+                          memberType: (((r.memberType ?? 'individual').trim() || 'individual') as any),
+                          maritalStatus: (((r.maritalStatus ?? 'single').trim() || 'single') as any),
+                          anniversaryDate: (r.anniversaryDate ?? '').trim() || undefined,
+                          baptismStatus: (((r.baptismStatus ?? 'not_baptized').trim() || 'not_baptized') as any),
+                          baptismDate: (r.baptismDate ?? '').trim() || undefined,
+                          churchRole: (((r.churchRole ?? 'attendee').trim() || 'attendee') as any),
+                          team: (r.team ?? '').trim() || undefined,
+                          status: (((r.status ?? 'regular').trim() || 'regular') as any),
+                          remarks: (r.remarks ?? '').trim() || undefined,
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                        };
+                        const id = await createMember(member);
+                        return { ...member, id } as Member;
+                      })
+                    );
+
+                    const succeeded = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<Member>[];
+                    const failed = results.filter(r => r.status === 'rejected') as PromiseRejectedResult[];
+
+                    if (succeeded.length) {
+                      setMembers(prev => [...prev, ...succeeded.map(s => s.value)]);
+                    }
+
+                    if (failed.length) {
+                      console.error('Import failures:', failed.map(f => f.reason));
+                      toast.error(`Imported ${succeeded.length} members, ${failed.length} failed (check console)`);
+                    } else {
+                      toast.success(`Imported ${succeeded.length} members`);
+                    }
+                  } catch (error) {
+                    console.error('Import error:', error);
+                    toast.error(`Import failed: ${getErrorMessage(error)}`);
+                  } finally {
+                    // allow selecting same file again
+                    e.target.value = '';
+                  }
+                }}
+              />
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => importInputRef.current?.click()}
+              >
                 <Upload className="w-4 h-4" />
                 Import
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  const headers = [
+                    'memberId','name','dob','gender','phone',
+                    'place','city','district','state','country','pincode',
+                    'memberType','maritalStatus','anniversaryDate','baptismStatus','baptismDate',
+                    'churchRole','team','status','remarks'
+                  ];
+                  const rows = members.map(m => [
+                    m.memberId,
+                    m.name,
+                    m.dob,
+                    m.gender,
+                    m.phone,
+                    m.address?.place || '',
+                    m.address?.city || '',
+                    m.address?.district || '',
+                    m.address?.state || '',
+                    m.address?.country || '',
+                    m.address?.pincode || '',
+                    m.memberType,
+                    m.maritalStatus,
+                    m.anniversaryDate || '',
+                    m.baptismStatus,
+                    m.baptismDate || '',
+                    m.churchRole,
+                    m.team || '',
+                    m.status,
+                    m.remarks || ''
+                  ]);
+                  downloadCsv('members.csv', headers, rows);
+                  toast.success('Export started');
+                }}
+              >
                 <Download className="w-4 h-4" />
                 Export
               </Button>

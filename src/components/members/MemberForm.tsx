@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Member, MemberStatus } from '@/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Member, MemberStatus, RelationshipType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,8 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { teams } from '@/data/mockData';
 import { getMembers } from '@/services/firestore';
+import { Search } from 'lucide-react';
 
 interface MemberFormProps {
   member?: Member;
@@ -20,7 +22,19 @@ interface MemberFormProps {
   onCancel: () => void;
 }
 
+type MemberCategory = 'new_family_head' | 'existing_family_member';
+
+const RELATIONSHIP_OPTIONS: RelationshipType[] = [
+  'Head', 'Wife', 'Husband', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Other'
+];
+
 export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel }) => {
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [memberCategory, setMemberCategory] = useState<MemberCategory>('new_family_head');
+  const [selectedFamilyHead, setSelectedFamilyHead] = useState<Member | null>(null);
+  const [familyHeadSearch, setFamilyHeadSearch] = useState('');
+  const [showFamilyHeadDropdown, setShowFamilyHeadDropdown] = useState(false);
+
   const [formData, setFormData] = useState({
     name: member?.name || '',
     dob: member?.dob || '',
@@ -32,7 +46,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     state: member?.address?.state || '',
     country: member?.address?.country || 'India',
     pincode: member?.address?.pincode || '',
-    memberType: member?.memberType || 'individual',
+    relationship: (member?.relationship || 'Head') as RelationshipType,
     maritalStatus: member?.maritalStatus || 'single',
     anniversaryDate: member?.anniversaryDate || '',
     baptismStatus: member?.baptismStatus || 'not_baptized',
@@ -43,39 +57,115 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     remarks: member?.remarks || '',
   });
 
-  const [nextMemberId, setNextMemberId] = useState<string>('IAG00001');
+  const [nextBaseMemberId, setNextBaseMemberId] = useState<string>('IAG00001');
 
+  // Fetch all members for family head selection and ID generation
   useEffect(() => {
-    const fetchNextMemberId = async () => {
-      if (!member) {
-        try {
-          const existingMembers = await getMembers();
-          // Extract numbers from existing member IDs and find the max
-          const memberNumbers = existingMembers
+    const fetchMembers = async () => {
+      try {
+        const existingMembers = await getMembers();
+        setAllMembers(existingMembers);
+        
+        if (!member) {
+          // Calculate next base member ID for new family heads
+          const baseNumbers = existingMembers
             .map(m => {
-              const match = m.memberId?.match(/IAG(\d+)/);
+              // Extract base number from either IAG00001 or IAG00001-1 format
+              const match = m.memberId?.match(/^IAG(\d+)/);
               return match ? parseInt(match[1], 10) : 0;
             })
             .filter(n => !isNaN(n));
           
-          const maxNumber = memberNumbers.length > 0 ? Math.max(...memberNumbers) : 0;
+          const maxNumber = baseNumbers.length > 0 ? Math.max(...baseNumbers) : 0;
           const nextNumber = maxNumber + 1;
-          setNextMemberId(`IAG${nextNumber.toString().padStart(5, '0')}`);
-        } catch (error) {
-          console.error('Error fetching members for ID generation:', error);
-          setNextMemberId('IAG00001');
+          setNextBaseMemberId(`IAG${nextNumber.toString().padStart(5, '0')}`);
         }
+      } catch (error) {
+        console.error('Error fetching members for ID generation:', error);
+        setNextBaseMemberId('IAG00001');
       }
     };
-    fetchNextMemberId();
+    fetchMembers();
   }, [member]);
+
+  // Get all family heads for selection
+  const familyHeads = useMemo(() => {
+    return allMembers.filter(m => m.isHeadOfFamily);
+  }, [allMembers]);
+
+  // Filter family heads based on search
+  const filteredFamilyHeads = useMemo(() => {
+    if (!familyHeadSearch.trim()) return familyHeads;
+    const query = familyHeadSearch.toLowerCase();
+    return familyHeads.filter(h => 
+      h.name.toLowerCase().includes(query) || 
+      h.memberId.toLowerCase().includes(query)
+    );
+  }, [familyHeads, familyHeadSearch]);
+
+  // Generate next member ID for existing family
+  const getNextFamilyMemberId = (familyId: string): string => {
+    const familyMembers = allMembers.filter(m => m.familyId === familyId && !m.isHeadOfFamily);
+    const memberNumbers = familyMembers
+      .map(m => {
+        const match = m.memberId?.match(/-(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter(n => !isNaN(n));
+    
+    const maxNumber = memberNumbers.length > 0 ? Math.max(...memberNumbers) : 0;
+    return `${familyId}-${maxNumber + 1}`;
+  };
+
+  // Pre-fill address when selecting a family head
+  useEffect(() => {
+    if (selectedFamilyHead && memberCategory === 'existing_family_member') {
+      setFormData(prev => ({
+        ...prev,
+        place: selectedFamilyHead.address?.place || prev.place,
+        city: selectedFamilyHead.address?.city || prev.city,
+        district: selectedFamilyHead.address?.district || prev.district,
+        state: selectedFamilyHead.address?.state || prev.state,
+        country: selectedFamilyHead.address?.country || prev.country,
+        pincode: selectedFamilyHead.address?.pincode || prev.pincode,
+      }));
+    }
+  }, [selectedFamilyHead, memberCategory]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    let memberId: string;
+    let familyId: string;
+    let isHeadOfFamily: boolean;
+    let relationship: RelationshipType;
+
+    if (member) {
+      // Editing existing member - preserve IDs
+      memberId = member.memberId;
+      familyId = member.familyId;
+      isHeadOfFamily = member.isHeadOfFamily;
+      relationship = formData.relationship;
+    } else if (memberCategory === 'new_family_head') {
+      // New family head
+      memberId = nextBaseMemberId;
+      familyId = nextBaseMemberId;
+      isHeadOfFamily = true;
+      relationship = 'Head';
+    } else {
+      // Existing family member
+      if (!selectedFamilyHead) {
+        return; // Should not happen due to form validation
+      }
+      familyId = selectedFamilyHead.familyId;
+      memberId = getNextFamilyMemberId(familyId);
+      isHeadOfFamily = false;
+      relationship = formData.relationship;
+    }
+
     const newMember: Member = {
       id: member?.id || crypto.randomUUID(),
-      memberId: member?.memberId || nextMemberId,
+      memberId,
       name: formData.name,
       dob: formData.dob,
       gender: formData.gender as 'male' | 'female',
@@ -88,7 +178,9 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
         country: formData.country,
         pincode: formData.pincode,
       },
-      memberType: formData.memberType as 'individual' | 'family',
+      familyId,
+      isHeadOfFamily,
+      relationship,
       maritalStatus: formData.maritalStatus as Member['maritalStatus'],
       anniversaryDate: formData.anniversaryDate || undefined,
       baptismStatus: formData.baptismStatus as 'baptized' | 'not_baptized',
@@ -104,8 +196,133 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     onSave(newMember);
   };
 
+  const isEditMode = !!member;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Member Category - Only show when adding new member */}
+      {!isEditMode && (
+        <div className="space-y-4">
+          <h3 className="font-semibold text-foreground border-b border-border/50 pb-2">
+            Member Category
+          </h3>
+          <RadioGroup
+            value={memberCategory}
+            onValueChange={(value: MemberCategory) => {
+              setMemberCategory(value);
+              setSelectedFamilyHead(null);
+              setFamilyHeadSearch('');
+              if (value === 'new_family_head') {
+                setFormData(prev => ({ ...prev, relationship: 'Head' }));
+              } else {
+                setFormData(prev => ({ ...prev, relationship: 'Wife' }));
+              }
+            }}
+            className="flex flex-col gap-3"
+          >
+            <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/50 cursor-pointer">
+              <RadioGroupItem value="new_family_head" id="new_family_head" />
+              <Label htmlFor="new_family_head" className="cursor-pointer flex-1">
+                <span className="font-medium">New Family (Head)</span>
+                <p className="text-sm text-muted-foreground">Create a new family with this member as the head</p>
+                {memberCategory === 'new_family_head' && (
+                  <span className="text-xs text-primary mt-1 block">
+                    Member ID will be: {nextBaseMemberId}
+                  </span>
+                )}
+              </Label>
+            </div>
+            <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/50 cursor-pointer">
+              <RadioGroupItem value="existing_family_member" id="existing_family_member" />
+              <Label htmlFor="existing_family_member" className="cursor-pointer flex-1">
+                <span className="font-medium">Existing Family Member</span>
+                <p className="text-sm text-muted-foreground">Add this member to an existing family</p>
+              </Label>
+            </div>
+          </RadioGroup>
+
+          {/* Family Head Selection - Only show when adding to existing family */}
+          {memberCategory === 'existing_family_member' && (
+            <div className="space-y-2">
+              <Label>Select Family Head *</Label>
+              <div className="relative">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or member ID..."
+                    value={familyHeadSearch}
+                    onChange={(e) => {
+                      setFamilyHeadSearch(e.target.value);
+                      setShowFamilyHeadDropdown(true);
+                    }}
+                    onFocus={() => setShowFamilyHeadDropdown(true)}
+                    className="pl-10 bg-secondary/50"
+                  />
+                </div>
+                {showFamilyHeadDropdown && filteredFamilyHeads.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredFamilyHeads.map((head) => (
+                      <button
+                        key={head.id}
+                        type="button"
+                        className="w-full px-4 py-2 text-left hover:bg-secondary/50 flex justify-between items-center"
+                        onClick={() => {
+                          setSelectedFamilyHead(head);
+                          setFamilyHeadSearch(head.name);
+                          setShowFamilyHeadDropdown(false);
+                        }}
+                      >
+                        <span>{head.name}</span>
+                        <span className="text-xs text-muted-foreground">{head.memberId}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedFamilyHead && (
+                <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
+                  <p className="text-sm">
+                    <span className="font-medium">Selected Family:</span> {selectedFamilyHead.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Family ID: {selectedFamilyHead.familyId} • 
+                    New Member ID will be: {getNextFamilyMemberId(selectedFamilyHead.familyId)}
+                  </p>
+                </div>
+              )}
+              {familyHeads.length === 0 && (
+                <p className="text-sm text-muted-foreground italic">
+                  No family heads found. Please add a family head first.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Relationship - Show when editing or adding to existing family */}
+      {(isEditMode || memberCategory === 'existing_family_member') && (
+        <div className="space-y-2">
+          <Label htmlFor="relationship">Relationship to Family Head *</Label>
+          <Select
+            value={formData.relationship}
+            onValueChange={(value: RelationshipType) => setFormData({ ...formData, relationship: value })}
+            disabled={isEditMode && member?.isHeadOfFamily}
+          >
+            <SelectTrigger className="bg-secondary/50">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RELATIONSHIP_OPTIONS.filter(r => 
+                isEditMode && member?.isHeadOfFamily ? r === 'Head' : r !== 'Head'
+              ).map((rel) => (
+                <SelectItem key={rel} value={rel}>{rel}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Personal Info */}
       <div className="space-y-4">
         <h3 className="font-semibold text-foreground border-b border-border/50 pb-2">
@@ -348,7 +565,11 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" className="bg-primary hover:bg-primary/90">
+        <Button 
+          type="submit" 
+          className="bg-primary hover:bg-primary/90"
+          disabled={!isEditMode && memberCategory === 'existing_family_member' && !selectedFamilyHead}
+        >
           {member ? 'Update Member' : 'Add Member'}
         </Button>
       </div>

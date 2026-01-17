@@ -9,9 +9,11 @@ export interface User {
 
 export type MemberStatus = 'regular' | 'long_absent' | 'occasional_visitor';
 
+export type RelationshipType = 'Head' | 'Wife' | 'Husband' | 'Son' | 'Daughter' | 'Father' | 'Mother' | 'Brother' | 'Sister' | 'Other';
+
 export interface Member {
   id: string;
-  memberId: string; // IAG00001 format
+  memberId: string; // IAG00001 (head) or IAG00001-1 (family member) format
   name: string;
   dob: string;
   gender: 'male' | 'female';
@@ -25,8 +27,12 @@ export interface Member {
     country: string;
     pincode: string;
   };
-  memberType: 'individual' | 'family';
-  familyId?: string;
+  // Family-related fields
+  familyId: string; // Base family ID (e.g., IAG00001)
+  isHeadOfFamily: boolean;
+  relationship: RelationshipType;
+  // Legacy field for backward compatibility
+  memberType?: 'individual' | 'family';
   familyRole?: 'head' | 'spouse' | 'child' | 'other';
   maritalStatus: 'single' | 'married' | 'widowed' | 'divorced';
   anniversaryDate?: string;

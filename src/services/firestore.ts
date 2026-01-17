@@ -35,6 +35,25 @@ const timestampToString = (timestamp: Timestamp | string): string => {
   return timestamp;
 };
 
+// Firestore does not allow `undefined` values. This removes undefined recursively.
+const stripUndefined = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(stripUndefined).filter(v => v !== undefined);
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const cleanedValue = stripUndefined(v);
+      if (cleanedValue !== undefined) cleaned[k] = cleanedValue;
+    }
+    return cleaned;
+  }
+  return value === undefined ? undefined : value;
+};
+
+const toFirestoreData = (data: Record<string, unknown>) => stripUndefined(data) as DocumentData;
+
 // ==================== USERS ====================
 export const getUser = async (userId: string): Promise<User | null> => {
   const docRef = doc(db, COLLECTIONS.USERS, userId);
@@ -96,20 +115,25 @@ export const getMemberByMemberId = async (memberId: string): Promise<Member | nu
 };
 
 export const createMember = async (memberData: Omit<Member, 'id'>): Promise<string> => {
-  const docRef = await addDoc(collection(db, COLLECTIONS.MEMBERS), {
-    ...memberData,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now()
-  });
+  const docRef = await addDoc(
+    collection(db, COLLECTIONS.MEMBERS),
+    toFirestoreData({
+      ...memberData,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    })
+  );
   return docRef.id;
 };
-
 export const updateMember = async (memberId: string, memberData: Partial<Member>): Promise<void> => {
   const docRef = doc(db, COLLECTIONS.MEMBERS, memberId);
-  await updateDoc(docRef, {
-    ...memberData,
-    updatedAt: Timestamp.now()
-  } as DocumentData);
+  await updateDoc(
+    docRef,
+    toFirestoreData({
+      ...memberData,
+      updatedAt: Timestamp.now()
+    })
+  );
 };
 
 export const deleteMember = async (memberId: string): Promise<void> => {

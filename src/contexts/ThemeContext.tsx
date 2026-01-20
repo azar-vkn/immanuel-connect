@@ -13,7 +13,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem('iag_theme');
-    return (saved as Theme) || 'dark';
+    return (saved as Theme) || 'light';
   });
 
   useEffect(() => {

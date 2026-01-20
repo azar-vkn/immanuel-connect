@@ -143,8 +143,10 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     if (member) {
       // Editing existing member - preserve IDs
       memberId = member.memberId;
-      familyId = member.familyId;
-      isHeadOfFamily = member.isHeadOfFamily;
+      // For backward compatibility: if familyId is missing, use memberId as familyId
+      familyId = member.familyId || member.memberId;
+      // For backward compatibility: if isHeadOfFamily is missing, assume true if no dash in memberId
+      isHeadOfFamily = member.isHeadOfFamily ?? !member.memberId.includes('-');
       relationship = formData.relationship;
     } else if (memberCategory === 'new_family_head') {
       // New family head
@@ -157,7 +159,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
       if (!selectedFamilyHead) {
         return; // Should not happen due to form validation
       }
-      familyId = selectedFamilyHead.familyId;
+      familyId = selectedFamilyHead.familyId || selectedFamilyHead.memberId;
       memberId = getNextFamilyMemberId(familyId);
       isHeadOfFamily = false;
       relationship = formData.relationship;

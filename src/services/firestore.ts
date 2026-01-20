@@ -75,12 +75,15 @@ export const createUser = async (userId: string, userData: Omit<User, 'id'>): Pr
 // ==================== MEMBERS ====================
 export const getMembers = async (): Promise<Member[]> => {
   const querySnapshot = await getDocs(collection(db, COLLECTIONS.MEMBERS));
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-    createdAt: timestampToString(doc.data().createdAt),
-    updatedAt: timestampToString(doc.data().updatedAt)
-  })) as Member[];
+  return querySnapshot.docs.map(docSnap => {
+    const data = docSnap.data();
+    return {
+      ...data,
+      id: docSnap.id, // Always use Firestore document ID, not any stored 'id' field
+      createdAt: timestampToString(data.createdAt),
+      updatedAt: timestampToString(data.updatedAt)
+    } as Member;
+  });
 };
 
 export const getMember = async (memberId: string): Promise<Member | null> => {
@@ -89,8 +92,8 @@ export const getMember = async (memberId: string): Promise<Member | null> => {
   if (docSnap.exists()) {
     const data = docSnap.data();
     return {
-      id: docSnap.id,
       ...data,
+      id: docSnap.id, // Always use Firestore document ID
       createdAt: timestampToString(data.createdAt),
       updatedAt: timestampToString(data.updatedAt)
     } as Member;
@@ -102,11 +105,11 @@ export const getMemberByMemberId = async (memberId: string): Promise<Member | nu
   const q = query(collection(db, COLLECTIONS.MEMBERS), where('memberId', '==', memberId));
   const querySnapshot = await getDocs(q);
   if (!querySnapshot.empty) {
-    const doc = querySnapshot.docs[0];
-    const data = doc.data();
+    const docSnap = querySnapshot.docs[0];
+    const data = docSnap.data();
     return {
-      id: doc.id,
       ...data,
+      id: docSnap.id, // Always use Firestore document ID
       createdAt: timestampToString(data.createdAt),
       updatedAt: timestampToString(data.updatedAt)
     } as Member;
@@ -143,12 +146,15 @@ export const deleteMember = async (memberId: string): Promise<void> => {
 export const getMembersByTeam = async (team: string): Promise<Member[]> => {
   const q = query(collection(db, COLLECTIONS.MEMBERS), where('team', '==', team));
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-    createdAt: timestampToString(doc.data().createdAt),
-    updatedAt: timestampToString(doc.data().updatedAt)
-  })) as Member[];
+  return querySnapshot.docs.map(docSnap => {
+    const data = docSnap.data();
+    return {
+      ...data,
+      id: docSnap.id, // Always use Firestore document ID
+      createdAt: timestampToString(data.createdAt),
+      updatedAt: timestampToString(data.updatedAt)
+    } as Member;
+  });
 };
 
 // ==================== FAMILIES ====================

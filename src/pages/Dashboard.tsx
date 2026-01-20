@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { BirthdayCard } from '@/components/dashboard/BirthdayCard';
@@ -159,12 +160,12 @@ const Dashboard: React.FC = () => {
 };
 
 const QuickAction: React.FC<{ label: string; href: string; color: string }> = ({ label, href, color }) => (
-  <a
-    href={href}
+  <Link
+    to={href}
     className={`p-4 rounded-lg text-center font-medium transition-all duration-200 ${color}`}
   >
     {label}
-  </a>
+  </Link>
 );
 
 export default Dashboard;

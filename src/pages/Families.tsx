@@ -1,35 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { getFamilies, getMembers, updateFamily, deleteFamily as deleteFirestoreFamily } from '@/services/firestore';
-import { Family, Member } from '@/types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getMembers } from '@/services/firestore';
+import { Member } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { UsersRound, Edit2, Trash2, User, Eye, Loader2 } from 'lucide-react';
-import { FamilyViewDialog } from '@/components/families/FamilyViewDialog';
-import { FamilyEditDialog } from '@/components/families/FamilyEditDialog';
+import { UsersRound, Eye, User, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { MemberViewDialog } from '@/components/members/MemberViewDialog';
 import { toast } from 'sonner';
+
+interface FamilyGroup {
+  familyId: string;
+  head: Member | null;
+  members: Member[];
+  memberCount: number;
+}
 
 const Families: React.FC = () => {
   const { hasPermission } = useAuth();
-  const [families, setFamilies] = useState<Family[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedFamily, setSelectedFamily] = useState<Family | null>(null);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [showViewDialog, setShowViewDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
 
-  const canEdit = hasPermission('families.edit');
-  const canDelete = hasPermission('families.delete');
-
-  // Fetch data from Firestore
+  // Fetch members from Firestore
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [familiesData, membersData] = await Promise.all([
-          getFamilies(),
-          getMembers()
-        ]);
-        setFamilies(familiesData);
+        const membersData = await getMembers();
         setMembers(membersData);
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -41,43 +39,54 @@ const Families: React.FC = () => {
     fetchData();
   }, []);
 
-  const getFamilyMembers = (memberIds: string[]) => {
-    return members.filter(m => memberIds.includes(m.id));
-  };
-
-  const handleView = (family: Family) => {
-    setSelectedFamily(family);
-    setShowViewDialog(true);
-  };
-
-  const handleEdit = (family: Family) => {
-    setSelectedFamily(family);
-    setShowEditDialog(true);
-  };
-
-  const handleSaveFamily = async (updatedFamily: Family) => {
-    try {
-      await updateFamily(updatedFamily.id, updatedFamily);
-      setFamilies(families.map(f => f.id === updatedFamily.id ? updatedFamily : f));
-      setSelectedFamily(null);
-      toast.success('Family updated successfully');
-    } catch (error) {
-      console.error('Error updating family:', error);
-      toast.error('Failed to update family');
-    }
-  };
-
-  const handleDelete = async (familyId: string) => {
-    if (confirm('Are you sure you want to delete this family?')) {
-      try {
-        await deleteFirestoreFamily(familyId);
-        setFamilies(families.filter(f => f.id !== familyId));
-        toast.success('Family deleted successfully');
-      } catch (error) {
-        console.error('Error deleting family:', error);
-        toast.error('Failed to delete family');
+  // Derive families from members collection
+  const families: FamilyGroup[] = useMemo(() => {
+    const familyMap = new Map<string, Member[]>();
+    
+    members.forEach(member => {
+      // Use familyId if available, otherwise use memberId as family identifier
+      const familyId = member.familyId || member.memberId;
+      if (!familyMap.has(familyId)) {
+        familyMap.set(familyId, []);
       }
-    }
+      familyMap.get(familyId)!.push(member);
+    });
+    
+    // Convert to array and sort each family
+    return Array.from(familyMap.entries())
+      .map(([familyId, familyMembers]) => {
+        // Sort: head first, then by memberId
+        familyMembers.sort((a, b) => {
+          if (a.isHeadOfFamily && !b.isHeadOfFamily) return -1;
+          if (!a.isHeadOfFamily && b.isHeadOfFamily) return 1;
+          return a.memberId.localeCompare(b.memberId);
+        });
+        
+        return {
+          familyId,
+          head: familyMembers.find(m => m.isHeadOfFamily) || familyMembers[0] || null,
+          members: familyMembers,
+          memberCount: familyMembers.length
+        };
+      })
+      .sort((a, b) => (a.head?.name || '').localeCompare(b.head?.name || ''));
+  }, [members]);
+
+  const toggleFamilyExpansion = (familyId: string) => {
+    setExpandedFamilies(prev => {
+      const next = new Set(prev);
+      if (next.has(familyId)) {
+        next.delete(familyId);
+      } else {
+        next.add(familyId);
+      }
+      return next;
+    });
+  };
+
+  const handleViewMember = (member: Member) => {
+    setSelectedMember(member);
+    setShowViewDialog(true);
   };
 
   if (loading) {
@@ -93,73 +102,63 @@ const Families: React.FC = () => {
       {/* Header */}
       <div className="animate-fade-in">
         <h1 className="font-serif text-3xl font-bold text-gold-gradient">Families</h1>
-        <p className="text-muted-foreground">View and manage church families</p>
+        <p className="text-muted-foreground">View and manage church families ({families.length} families, {members.length} members)</p>
       </div>
 
       {/* Families Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {families.map((family, index) => {
-          const familyMembers = getFamilyMembers(family.members);
-          const headMember = members.find(m => m.id === family.headMemberId);
+          const isExpanded = expandedFamilies.has(family.familyId);
 
           return (
             <div
-              key={family.id}
+              key={family.familyId}
               className="glass rounded-xl p-6 card-hover animate-fade-in"
-              style={{ animationDelay: `${index * 100}ms` }}
+              style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 rounded-xl bg-primary/10 text-primary">
                   <UsersRound className="w-6 h-6" />
                 </div>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                    onClick={() => handleView(family)}
-                  >
-                    <Eye className="w-4 h-4" />
-                  </Button>
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-blue-400"
-                      onClick={() => handleEdit(family)}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                  {canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDelete(family.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
+                <Badge variant="outline" className="text-xs">
+                  {family.familyId}
+                </Badge>
               </div>
 
-              <h3 className="font-semibold text-lg text-foreground mb-2">{family.name}</h3>
-              
-              {headMember && (
-                <p className="text-sm text-muted-foreground mb-4">
-                  Head: <span className="text-foreground">{headMember.name}</span>
-                </p>
+              {/* Family Head Info */}
+              {family.head && (
+                <div className="mb-4">
+                  <h3 className="font-semibold text-lg text-foreground">{family.head.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Head of Family • <span className="text-primary">{family.head.memberId}</span>
+                  </p>
+                </div>
               )}
 
-              <div className="space-y-2">
+              {/* Member Count & Expand Toggle */}
+              <div 
+                className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-secondary/30 -mx-2 mb-2"
+                onClick={() => toggleFamilyExpansion(family.familyId)}
+              >
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Family Members ({familyMembers.length})
+                  Family Members ({family.memberCount})
                 </p>
-                {familyMembers.slice(0, 3).map(member => (
+                {family.memberCount > 1 && (
+                  isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  )
+                )}
+              </div>
+
+              {/* Members List */}
+              <div className="space-y-2">
+                {(isExpanded ? family.members : family.members.slice(0, 1)).map(member => (
                   <div
                     key={member.id}
-                    className="flex items-center gap-3 p-2 rounded-lg bg-secondary/30"
+                    className="flex items-center gap-3 p-2 rounded-lg bg-secondary/30 cursor-pointer hover:bg-secondary/50"
+                    onClick={() => handleViewMember(member)}
                   >
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <User className="w-4 h-4 text-primary" />
@@ -167,7 +166,7 @@ const Families: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{member.name}</p>
                       <p className="text-xs text-muted-foreground capitalize">
-                        {member.familyRole || 'Member'}
+                        {member.relationship || (member.isHeadOfFamily ? 'Head' : 'Member')}
                       </p>
                     </div>
                     <Badge variant="outline" className="text-xs">
@@ -175,12 +174,28 @@ const Families: React.FC = () => {
                     </Badge>
                   </div>
                 ))}
-                {familyMembers.length > 3 && (
-                  <p className="text-xs text-muted-foreground text-center py-1">
-                    +{familyMembers.length - 3} more members
+                {!isExpanded && family.memberCount > 1 && (
+                  <p 
+                    className="text-xs text-primary text-center py-1 cursor-pointer hover:underline"
+                    onClick={() => toggleFamilyExpansion(family.familyId)}
+                  >
+                    +{family.memberCount - 1} more members
                   </p>
                 )}
               </div>
+
+              {/* View All Button */}
+              {family.head && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-4 gap-2"
+                  onClick={() => handleViewMember(family.head!)}
+                >
+                  <Eye className="w-4 h-4" />
+                  View Family Head
+                </Button>
+              )}
             </div>
           );
         })}
@@ -193,21 +208,11 @@ const Families: React.FC = () => {
         </div>
       )}
 
-      {/* View Dialog */}
-      <FamilyViewDialog
-        family={selectedFamily}
-        members={members}
+      {/* View Member Dialog */}
+      <MemberViewDialog
+        member={selectedMember}
         open={showViewDialog}
         onOpenChange={setShowViewDialog}
-      />
-
-      {/* Edit Dialog */}
-      <FamilyEditDialog
-        family={selectedFamily}
-        allMembers={members}
-        open={showEditDialog}
-        onOpenChange={setShowEditDialog}
-        onSave={handleSaveFamily}
       />
     </div>
   );

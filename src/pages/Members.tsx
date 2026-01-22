@@ -302,11 +302,17 @@ const Members: React.FC = () => {
   };
 
   const handleView = (member: Member) => {
+    // Close other dialogs first to avoid state conflicts
+    setShowIdCard(false);
+    setShowEditDialog(false);
     setSelectedMember(member);
     setShowViewDialog(true);
   };
 
   const handleEdit = (member: Member) => {
+    // Close other dialogs first to avoid state conflicts
+    setShowIdCard(false);
+    setShowViewDialog(false);
     setSelectedMember(member);
     setShowEditDialog(true);
   };

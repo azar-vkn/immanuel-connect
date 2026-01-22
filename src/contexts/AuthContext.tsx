@@ -34,7 +34,7 @@ const rolePermissions: Record<UserRole, string[]> = {
   ],
   marker: [
     'dashboard.view',
-    'members.view',
+    'members.view', 'members.export',
     'families.view',
     'events.view', 'events.create', 'events.edit',
     'attendance.view', 'attendance.mark',

@@ -85,6 +85,10 @@ const Families: React.FC = () => {
   };
 
   const handleViewMember = (member: Member) => {
+    if (!member) {
+      toast.error('Member data not available');
+      return;
+    }
     setSelectedMember(member);
     setShowViewDialog(true);
   };

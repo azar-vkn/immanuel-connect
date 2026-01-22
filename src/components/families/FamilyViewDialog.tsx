@@ -23,10 +23,8 @@ export const FamilyViewDialog: React.FC<FamilyViewDialogProps> = ({
   open,
   onOpenChange,
 }) => {
-  if (!family) return null;
-
-  const familyMembers = members.filter(m => family.members.includes(m.id));
-  const headMember = members.find(m => m.id === family.headMemberId);
+  const familyMembers = family ? members.filter(m => family.members.includes(m.id)) : [];
+  const headMember = family ? members.find(m => m.id === family.headMemberId) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -37,6 +35,12 @@ export const FamilyViewDialog: React.FC<FamilyViewDialogProps> = ({
             Family Details
           </DialogTitle>
         </DialogHeader>
+        
+        {!family ? (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-muted-foreground">No family selected</p>
+          </div>
+        ) : (
 
         <div className="space-y-6">
           {/* Family Header */}
@@ -114,6 +118,7 @@ export const FamilyViewDialog: React.FC<FamilyViewDialogProps> = ({
             </div>
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

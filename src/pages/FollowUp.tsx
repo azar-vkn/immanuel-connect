@@ -197,27 +197,29 @@ const FollowUp: React.FC = () => {
         <Label className="text-base font-medium mb-3 block">
           {isAreaLeader ? 'Your Team' : 'Select Team'}
         </Label>
-        <Select 
-          value={selectedTeam} 
-          onValueChange={setSelectedTeam}
-          disabled={isAreaLeader && accessibleTeams.length <= 1}
-        >
-          <SelectTrigger className="bg-secondary/50 max-w-md">
-            <SelectValue placeholder="Choose a team..." />
-          </SelectTrigger>
-          <SelectContent>
-            {accessibleTeams.map(team => (
-              <SelectItem key={team.id} value={team.name}>
-                {team.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         
-        {isAreaLeader && accessibleTeams.length === 0 && (
-          <p className="text-sm text-muted-foreground mt-2">
+        {/* Area Leader with no assigned teams */}
+        {isAreaLeader && accessibleTeams.length === 0 ? (
+          <div className="text-sm text-muted-foreground bg-secondary/50 rounded-md p-3 max-w-md">
             You are not assigned to any team. Please contact an administrator.
-          </p>
+          </div>
+        ) : (
+          <Select 
+            value={selectedTeam} 
+            onValueChange={setSelectedTeam}
+            disabled={isAreaLeader}
+          >
+            <SelectTrigger className="bg-secondary/50 max-w-md">
+              <SelectValue placeholder={isAreaLeader ? (accessibleTeams[0]?.name || 'No team assigned') : 'Choose a team...'} />
+            </SelectTrigger>
+            <SelectContent>
+              {accessibleTeams.map(team => (
+                <SelectItem key={team.id} value={team.name}>
+                  {team.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
       </div>
 

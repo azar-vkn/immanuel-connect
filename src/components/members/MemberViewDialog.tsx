@@ -22,8 +22,6 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
   open,
   onOpenChange,
 }) => {
-  if (!member) return null;
-
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     try {
@@ -42,6 +40,12 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
             Member Details
           </DialogTitle>
         </DialogHeader>
+        
+        {!member ? (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-muted-foreground">No member selected</p>
+          </div>
+        ) : (
 
         <div className="space-y-6">
           {/* Header Info */}
@@ -193,6 +197,7 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
             <span>Updated: {formatDate(member.updatedAt)}</span>
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

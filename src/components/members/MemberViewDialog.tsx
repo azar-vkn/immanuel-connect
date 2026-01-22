@@ -22,12 +22,16 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
   open,
   onOpenChange,
 }) => {
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'N/A';
+  const formatDate = (dateValue?: string | { seconds: number; nanoseconds: number } | null) => {
+    if (!dateValue) return 'N/A';
     try {
-      return format(new Date(dateStr), 'dd MMM yyyy');
+      // Handle Firestore Timestamp objects
+      if (typeof dateValue === 'object' && 'seconds' in dateValue) {
+        return format(new Date(dateValue.seconds * 1000), 'dd MMM yyyy');
+      }
+      return format(new Date(dateValue), 'dd MMM yyyy');
     } catch {
-      return dateStr;
+      return typeof dateValue === 'string' ? dateValue : 'N/A';
     }
   };
 

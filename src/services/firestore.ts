@@ -28,11 +28,34 @@ const COLLECTIONS = {
 } as const;
 
 // Helper to convert Firestore timestamp to string
-const timestampToString = (timestamp: Timestamp | string): string => {
+const timestampToString = (timestamp: Timestamp | string | null | undefined): string => {
+  if (!timestamp) return '';
   if (timestamp instanceof Timestamp) {
     return timestamp.toDate().toISOString().split('T')[0];
   }
-  return timestamp;
+  if (typeof timestamp === 'string') {
+    return timestamp;
+  }
+  // Handle plain objects with seconds/nanoseconds (Firestore Timestamp-like)
+  if (typeof timestamp === 'object') {
+    const ts = timestamp as { seconds: number };
+    if ('seconds' in ts) {
+      return new Date(ts.seconds * 1000).toISOString().split('T')[0];
+    }
+  }
+  return '';
+};
+
+// Helper to convert all date fields in member data
+const convertMemberDates = (data: Record<string, unknown>): Record<string, unknown> => {
+  const dateFields = ['dob', 'baptismDate', 'anniversaryDate', 'createdAt', 'updatedAt'];
+  const converted = { ...data };
+  dateFields.forEach(field => {
+    if (converted[field]) {
+      converted[field] = timestampToString(converted[field] as Timestamp | string);
+    }
+  });
+  return converted;
 };
 
 // Firestore does not allow `undefined` values. This removes undefined recursively.
@@ -77,11 +100,10 @@ export const getMembers = async (): Promise<Member[]> => {
   const querySnapshot = await getDocs(collection(db, COLLECTIONS.MEMBERS));
   return querySnapshot.docs.map(docSnap => {
     const data = docSnap.data();
+    const converted = convertMemberDates(data);
     return {
-      ...data,
+      ...converted,
       id: docSnap.id, // Always use Firestore document ID, not any stored 'id' field
-      createdAt: timestampToString(data.createdAt),
-      updatedAt: timestampToString(data.updatedAt)
     } as Member;
   });
 };
@@ -91,11 +113,10 @@ export const getMember = async (memberId: string): Promise<Member | null> => {
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {
     const data = docSnap.data();
+    const converted = convertMemberDates(data);
     return {
-      ...data,
+      ...converted,
       id: docSnap.id, // Always use Firestore document ID
-      createdAt: timestampToString(data.createdAt),
-      updatedAt: timestampToString(data.updatedAt)
     } as Member;
   }
   return null;
@@ -107,11 +128,10 @@ export const getMemberByMemberId = async (memberId: string): Promise<Member | nu
   if (!querySnapshot.empty) {
     const docSnap = querySnapshot.docs[0];
     const data = docSnap.data();
+    const converted = convertMemberDates(data);
     return {
-      ...data,
+      ...converted,
       id: docSnap.id, // Always use Firestore document ID
-      createdAt: timestampToString(data.createdAt),
-      updatedAt: timestampToString(data.updatedAt)
     } as Member;
   }
   return null;
@@ -148,11 +168,10 @@ export const getMembersByTeam = async (team: string): Promise<Member[]> => {
   const querySnapshot = await getDocs(q);
   return querySnapshot.docs.map(docSnap => {
     const data = docSnap.data();
+    const converted = convertMemberDates(data);
     return {
-      ...data,
+      ...converted,
       id: docSnap.id, // Always use Firestore document ID
-      createdAt: timestampToString(data.createdAt),
-      updatedAt: timestampToString(data.updatedAt)
     } as Member;
   });
 };

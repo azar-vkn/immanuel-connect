@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { getMembers, getAttendance, getEvents } from '@/services/firestore';
-import { Member, Attendance, ChurchEvent } from '@/types';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { getMembers, getAttendance, getEvents, getFollowUps, createFollowUp, updateFollowUp } from '@/services/firestore';
+import { Member, Attendance, ChurchEvent, FollowUp as FollowUpType } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { Team } from '@/types/team';
 import { TeamManagementDialog } from '@/components/teams/TeamManagementDialog';
@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 
 interface FollowUpStatus {
   [memberId: string]: {
+    id?: string; // Firestore document ID for updates
     status: 'pending' | 'contacted' | 'unreachable';
     remarks: string;
   };
@@ -44,10 +45,12 @@ const FollowUp: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
+  const [followUps, setFollowUps] = useState<FollowUpType[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [followUpStatus, setFollowUpStatus] = useState<FollowUpStatus>({});
   const [teams, setTeams] = useState<Team[]>(getInitialTeams);
+  const [savingStatus, setSavingStatus] = useState<{ [memberId: string]: boolean }>({});
 
   const canEdit = hasPermission('followup.edit');
   const isAdmin = user?.role === 'admin';
@@ -57,14 +60,16 @@ const FollowUp: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [membersData, attendanceData, eventsData] = await Promise.all([
+        const [membersData, attendanceData, eventsData, followUpsData] = await Promise.all([
           getMembers(),
           getAttendance(),
-          getEvents()
+          getEvents(),
+          getFollowUps()
         ]);
         setMembers(membersData);
         setAttendance(attendanceData);
         setEvents(eventsData);
+        setFollowUps(followUpsData);
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error('Failed to load data');
@@ -108,6 +113,24 @@ const FollowUp: React.FC = () => {
     );
   }, [lastEvent, attendance]);
 
+  // Initialize followUpStatus from Firestore data for the last event
+  useEffect(() => {
+    if (!lastEvent) return;
+    
+    const eventFollowUps = followUps.filter(f => f.eventId === lastEvent.id);
+    const statusMap: FollowUpStatus = {};
+    
+    eventFollowUps.forEach(fu => {
+      statusMap[fu.memberId] = {
+        id: fu.id,
+        status: fu.status,
+        remarks: fu.remarks || ''
+      };
+    });
+    
+    setFollowUpStatus(statusMap);
+  }, [followUps, lastEvent]);
+
   // Get all team members with their attendance status
   const teamMembersWithStatus = useMemo(() => {
     if (!selectedTeam) return [];
@@ -132,20 +155,78 @@ const FollowUp: React.FC = () => {
   const absentCount = teamMembersWithStatus.filter(m => !m.isPresent).length;
   const presentCount = teamMembersWithStatus.filter(m => m.isPresent).length;
 
-  const updateStatus = (memberId: string, status: 'pending' | 'contacted' | 'unreachable') => {
-    setFollowUpStatus(prev => ({
-      ...prev,
-      [memberId]: { ...prev[memberId], status, remarks: prev[memberId]?.remarks || '' }
-    }));
-    toast.success('Status updated');
-  };
+  // Save follow-up to Firestore
+  const saveFollowUp = useCallback(async (memberId: string, status: 'pending' | 'contacted' | 'unreachable', remarks: string) => {
+    if (!lastEvent || !user) return;
+    
+    setSavingStatus(prev => ({ ...prev, [memberId]: true }));
+    
+    try {
+      const existingFollowUp = followUpStatus[memberId];
+      
+      if (existingFollowUp?.id) {
+        // Update existing follow-up
+        await updateFollowUp(existingFollowUp.id, {
+          status,
+          remarks,
+          updatedAt: new Date().toISOString(),
+          updatedBy: user.id
+        });
+      } else {
+        // Create new follow-up
+        const newId = await createFollowUp({
+          memberId,
+          eventId: lastEvent.id,
+          status,
+          remarks,
+          updatedAt: new Date().toISOString(),
+          updatedBy: user.id
+        });
+        
+        // Update local state with the new ID
+        setFollowUpStatus(prev => ({
+          ...prev,
+          [memberId]: { ...prev[memberId], id: newId }
+        }));
+      }
+      
+      toast.success('Follow-up saved');
+    } catch (error) {
+      console.error('Error saving follow-up:', error);
+      toast.error('Failed to save follow-up');
+    } finally {
+      setSavingStatus(prev => ({ ...prev, [memberId]: false }));
+    }
+  }, [lastEvent, user, followUpStatus]);
 
-  const updateRemarks = (memberId: string, remarks: string) => {
+  const updateStatus = useCallback((memberId: string, status: 'pending' | 'contacted' | 'unreachable') => {
+    const currentRemarks = followUpStatus[memberId]?.remarks || '';
+    
     setFollowUpStatus(prev => ({
       ...prev,
-      [memberId]: { ...prev[memberId], status: prev[memberId]?.status || 'pending', remarks }
+      [memberId]: { ...prev[memberId], status, remarks: currentRemarks }
     }));
-  };
+    
+    // Auto-save when status changes
+    saveFollowUp(memberId, status, currentRemarks);
+  }, [followUpStatus, saveFollowUp]);
+
+  const updateRemarks = useCallback((memberId: string, remarks: string) => {
+    const currentStatus = followUpStatus[memberId]?.status || 'pending';
+    
+    setFollowUpStatus(prev => ({
+      ...prev,
+      [memberId]: { ...prev[memberId], status: currentStatus, remarks }
+    }));
+  }, [followUpStatus]);
+
+  // Save remarks on blur (when user finishes typing)
+  const handleRemarksBlur = useCallback((memberId: string) => {
+    const current = followUpStatus[memberId];
+    if (current) {
+      saveFollowUp(memberId, current.status, current.remarks);
+    }
+  }, [followUpStatus, saveFollowUp]);
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -347,10 +428,15 @@ const FollowUp: React.FC = () => {
                             <Textarea
                               value={memberStatus?.remarks || ''}
                               onChange={(e) => updateRemarks(member.id, e.target.value)}
+                              onBlur={() => handleRemarksBlur(member.id)}
                               placeholder="Add notes..."
                               className="bg-secondary/50 resize-none"
                               rows={2}
+                              disabled={savingStatus[member.id]}
                             />
+                            {savingStatus[member.id] && (
+                              <p className="text-xs text-muted-foreground">Saving...</p>
+                            )}
                           </div>
                         </div>
                       )}

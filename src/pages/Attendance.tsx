@@ -93,11 +93,6 @@ const Attendance: React.FC = () => {
       const id = await markAttendance(newAttendanceData);
       setAttendance([...attendance, { id, ...newAttendanceData }]);
       toast.success(`Marked ${member.name} as present`);
-      
-      // Clear search fields
-      setSearchName('');
-      setSearchId('');
-      setSearchPhone('');
     } catch (error) {
       console.error('Error marking attendance:', error);
       toast.error('Failed to mark attendance');

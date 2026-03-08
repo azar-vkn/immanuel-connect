@@ -44,12 +44,13 @@ const Families: React.FC = () => {
     const familyMap = new Map<string, Member[]>();
     
     members.forEach(member => {
-      // Use familyId if available, otherwise use memberId as family identifier
-      const familyId = member.familyId || member.memberId;
-      if (!familyMap.has(familyId)) {
-        familyMap.set(familyId, []);
+      // Skip individual members (no familyId or familyId matches their own memberId)
+      if (!member.familyId || member.familyId === member.memberId) return;
+      
+      if (!familyMap.has(member.familyId)) {
+        familyMap.set(member.familyId, []);
       }
-      familyMap.get(familyId)!.push(member);
+      familyMap.get(member.familyId)!.push(member);
     });
     
     // Convert to array and sort each family

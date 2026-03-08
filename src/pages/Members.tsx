@@ -377,94 +377,29 @@ const Members: React.FC = () => {
                     const fileName = file.name.toLowerCase();
 
                     if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-                      // Parse Excel file
                       const buffer = await file.arrayBuffer();
                       const workbook = XLSX.read(buffer, { type: 'array' });
                       const sheetName = workbook.SheetNames[0];
                       const sheet = workbook.Sheets[sheetName];
                       rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: '', raw: false });
                     } else {
-                      // Parse CSV file
                       const text = await file.text();
                       rows = parseCsv(text);
                     }
 
-                    // Expected headers (case-sensitive):
-                    // name,dob,gender,phone,place,city,district,state,country,pincode,memberType,maritalStatus,anniversaryDate,baptismStatus,baptismDate,churchRole,team,status,remarks,memberId(optional)
-                    const required = ['name', 'dob', 'gender', 'phone'];
-                    const validRows = rows.filter(r => required.every(k => (r[k] ?? '').trim().length > 0));
-
-                    if (validRows.length === 0) {
-                      toast.error('Import failed: CSV has no valid rows (needs name,dob,gender,phone)');
+                    if (rows.length === 0) {
+                      toast.error('File has no data rows');
                       return;
                     }
 
-                    const existingNumbers = members
-                      .map(m => m.memberId?.match(/IAG(\d+)/))
-                      .map(match => (match ? parseInt(match[1], 10) : 0))
-                      .filter(n => !isNaN(n));
-                    let nextNumber = (existingNumbers.length ? Math.max(...existingNumbers) : 0) + 1;
-
-                    const results = await Promise.allSettled(
-                      validRows.map(async (r) => {
-                        const memberId = (r.memberId ?? '').trim() || `IAG${String(nextNumber++).padStart(5, '0')}`;
-                        // For imported members, treat them as family heads by default
-                        const familyId = (r.familyId ?? '').trim() || memberId.split('-')[0];
-                        const isHeadOfFamily = (r.isHeadOfFamily ?? '').trim().toLowerCase() === 'true' || !memberId.includes('-');
-                        const relationship = ((r.relationship ?? 'Head').trim() || 'Head') as any;
-                        
-                        const member: Member = {
-                          id: crypto.randomUUID(),
-                          memberId,
-                          name: (r.name ?? '').trim(),
-                          dob: (r.dob ?? '').trim(),
-                          gender: ((r.gender ?? '').trim().toLowerCase() === 'female' ? 'female' : 'male') as any,
-                          phone: (r.phone ?? '').trim(),
-                          address: {
-                            place: (r.place ?? '').trim(),
-                            city: (r.city ?? '').trim(),
-                            district: (r.district ?? '').trim(),
-                            state: (r.state ?? '').trim(),
-                            country: (r.country ?? 'India').trim(),
-                            pincode: (r.pincode ?? '').trim(),
-                          },
-                          familyId,
-                          isHeadOfFamily,
-                          relationship,
-                          maritalStatus: (((r.maritalStatus ?? 'single').trim() || 'single') as any),
-                          anniversaryDate: (r.anniversaryDate ?? '').trim() || undefined,
-                          baptismStatus: (((r.baptismStatus ?? 'not_baptized').trim() || 'not_baptized') as any),
-                          baptismDate: (r.baptismDate ?? '').trim() || undefined,
-                          churchRole: (((r.churchRole ?? 'attendee').trim() || 'attendee') as any),
-                          team: (r.team ?? '').trim() || undefined,
-                          status: (((r.status ?? 'regular').trim() || 'regular') as any),
-                          remarks: (r.remarks ?? '').trim() || undefined,
-                          createdAt: new Date().toISOString(),
-                          updatedAt: new Date().toISOString(),
-                        };
-                        const id = await createMember(member);
-                        return { ...member, id } as Member;
-                      })
-                    );
-
-                    const succeeded = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<Member>[];
-                    const failed = results.filter(r => r.status === 'rejected') as PromiseRejectedResult[];
-
-                    if (succeeded.length) {
-                      setMembers(prev => [...prev, ...succeeded.map(s => s.value)]);
-                    }
-
-                    if (failed.length) {
-                      console.error('Import failures:', failed.map(f => f.reason));
-                      toast.error(`Imported ${succeeded.length} members, ${failed.length} failed (check console)`);
-                    } else {
-                      toast.success(`Imported ${succeeded.length} members`);
-                    }
+                    const columns = Object.keys(rows[0]);
+                    setImportFileColumns(columns);
+                    setImportFileRows(rows);
+                    setShowMapperDialog(true);
                   } catch (error) {
                     console.error('Import error:', error);
-                    toast.error(`Import failed: ${getErrorMessage(error)}`);
+                    toast.error(`Failed to read file: ${getErrorMessage(error)}`);
                   } finally {
-                    // allow selecting same file again
                     e.target.value = '';
                   }
                 }}

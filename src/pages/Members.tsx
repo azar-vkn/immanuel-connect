@@ -364,15 +364,28 @@ const Members: React.FC = () => {
               <input
                 ref={importInputRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 className="hidden"
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
 
                   try {
-                    const text = await file.text();
-                    const rows = parseCsv(text);
+                    let rows: Record<string, string>[];
+                    const fileName = file.name.toLowerCase();
+
+                    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                      // Parse Excel file
+                      const buffer = await file.arrayBuffer();
+                      const workbook = XLSX.read(buffer, { type: 'array' });
+                      const sheetName = workbook.SheetNames[0];
+                      const sheet = workbook.Sheets[sheetName];
+                      rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: '', raw: false });
+                    } else {
+                      // Parse CSV file
+                      const text = await file.text();
+                      rows = parseCsv(text);
+                    }
 
                     // Expected headers (case-sensitive):
                     // name,dob,gender,phone,place,city,district,state,country,pincode,memberType,maritalStatus,anniversaryDate,baptismStatus,baptismDate,churchRole,team,status,remarks,memberId(optional)

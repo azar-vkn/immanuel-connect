@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { getMembers, createMember, updateMember, deleteMember } from '@/services/firestore';
 import { teams } from '@/data/mockData';
 import { Member } from '@/types';

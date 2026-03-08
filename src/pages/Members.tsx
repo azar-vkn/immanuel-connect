@@ -916,6 +916,99 @@ const Members: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Import Mapper Dialog */}
+      <ImportMapperDialog
+        open={showMapperDialog}
+        onOpenChange={setShowMapperDialog}
+        fileColumns={importFileColumns}
+        previewRows={importFileRows}
+        onConfirm={async (mapping) => {
+          setShowMapperDialog(false);
+          try {
+            // Remap rows using the user's column mapping
+            const mappedRows = importFileRows.map(row => {
+              const mapped: Record<string, string> = {};
+              for (const [appField, fileCol] of Object.entries(mapping)) {
+                mapped[appField] = (row[fileCol] ?? '').trim();
+              }
+              return mapped;
+            });
+
+            const required = ['name', 'dob', 'gender', 'phone'];
+            const validRows = mappedRows.filter(r => required.every(k => (r[k] ?? '').length > 0));
+
+            if (validRows.length === 0) {
+              toast.error('No valid rows found after mapping (need name, dob, gender, phone)');
+              return;
+            }
+
+            const existingNumbers = members
+              .map(m => m.memberId?.match(/IAG(\d+)/))
+              .map(match => (match ? parseInt(match[1], 10) : 0))
+              .filter(n => !isNaN(n));
+            let nextNumber = (existingNumbers.length ? Math.max(...existingNumbers) : 0) + 1;
+
+            const results = await Promise.allSettled(
+              validRows.map(async (r) => {
+                const memberId = (r.memberId ?? '').trim() || `IAG${String(nextNumber++).padStart(5, '0')}`;
+                const familyId = (r.familyId ?? '').trim() || memberId.split('-')[0];
+                const isHeadOfFamily = (r.isHeadOfFamily ?? '').trim().toLowerCase() === 'true' || !memberId.includes('-');
+                const relationship = ((r.relationship ?? 'Head').trim() || 'Head') as any;
+
+                const member: Member = {
+                  id: crypto.randomUUID(),
+                  memberId,
+                  name: r.name ?? '',
+                  dob: r.dob ?? '',
+                  gender: ((r.gender ?? '').toLowerCase() === 'female' ? 'female' : 'male') as any,
+                  phone: r.phone ?? '',
+                  address: {
+                    place: r.place ?? '',
+                    city: r.city ?? '',
+                    district: r.district ?? '',
+                    state: r.state ?? '',
+                    country: r.country || 'India',
+                    pincode: r.pincode ?? '',
+                  },
+                  familyId,
+                  isHeadOfFamily,
+                  relationship,
+                  maritalStatus: ((r.maritalStatus || 'single') as any),
+                  anniversaryDate: r.anniversaryDate || undefined,
+                  baptismStatus: ((r.baptismStatus || 'not_baptized') as any),
+                  baptismDate: r.baptismDate || undefined,
+                  churchRole: ((r.churchRole || 'attendee') as any),
+                  team: r.team || undefined,
+                  status: ((r.status || 'regular') as any),
+                  remarks: r.remarks || undefined,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+                const id = await createMember(member);
+                return { ...member, id } as Member;
+              })
+            );
+
+            const succeeded = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<Member>[];
+            const failed = results.filter(r => r.status === 'rejected') as PromiseRejectedResult[];
+
+            if (succeeded.length) {
+              setMembers(prev => [...prev, ...succeeded.map(s => s.value)]);
+            }
+
+            if (failed.length) {
+              console.error('Import failures:', failed.map(f => f.reason));
+              toast.error(`Imported ${succeeded.length} members, ${failed.length} failed`);
+            } else {
+              toast.success(`Successfully imported ${succeeded.length} members`);
+            }
+          } catch (error) {
+            console.error('Import error:', error);
+            toast.error(`Import failed: ${getErrorMessage(error)}`);
+          }
+        }}
+      />
     </div>
   );
 };

@@ -82,6 +82,17 @@ const Members: React.FC = () => {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Import mapper state
+  const [showMapperDialog, setShowMapperDialog] = useState(false);
+  const [importFileColumns, setImportFileColumns] = useState<string[]>([]);
+  const [importFileRows, setImportFileRows] = useState<Record<string, string>[]>([]);
+
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    return String(error);
+  };
 
   // Fetch members from Firestore
   useEffect(() => {

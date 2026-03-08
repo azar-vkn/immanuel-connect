@@ -54,6 +54,7 @@ import {
 import { MemberForm } from '@/components/members/MemberForm';
 import { MemberIDCard } from '@/components/members/MemberIDCard';
 import { MemberViewDialog } from '@/components/members/MemberViewDialog';
+import { ImportMapperDialog } from '@/components/members/ImportMapperDialog';
 import { toast } from 'sonner';
 
 interface Filters {

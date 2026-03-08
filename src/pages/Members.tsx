@@ -236,16 +236,6 @@ const Members: React.FC = () => {
   const canDelete = hasPermission('members.delete');
   const canCreate = hasPermission('members.create');
 
-  const importInputRef = useRef<HTMLInputElement | null>(null);
-
-  const getErrorMessage = (err: unknown) => {
-    if (err instanceof Error) return err.message;
-    try {
-      return JSON.stringify(err);
-    } catch {
-      return String(err);
-    }
-  };
 
   const parseCsv = (text: string): Record<string, string>[] => {
     const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);

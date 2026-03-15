@@ -456,6 +456,55 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
         </div>
       </div>
 
+      {/* Tamil Address (Optional) */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-foreground border-b border-border/50 pb-2">
+          முகவரி (Tamil Address) <span className="text-xs text-muted-foreground font-normal">— Optional</span>
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="tamilPlace">இடம் (Place)</Label>
+            <Input
+              id="tamilPlace"
+              value={formData.tamilPlace}
+              onChange={(e) => setFormData({ ...formData, tamilPlace: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="தெரு / இடம்"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tamilCity">நகரம் (City)</Label>
+            <Input
+              id="tamilCity"
+              value={formData.tamilCity}
+              onChange={(e) => setFormData({ ...formData, tamilCity: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="நகரம்"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tamilDistrict">மாவட்டம் (District)</Label>
+            <Input
+              id="tamilDistrict"
+              value={formData.tamilDistrict}
+              onChange={(e) => setFormData({ ...formData, tamilDistrict: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="மாவட்டம்"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tamilState">மாநிலம் (State)</Label>
+            <Input
+              id="tamilState"
+              value={formData.tamilState}
+              onChange={(e) => setFormData({ ...formData, tamilState: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="மாநிலம்"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Church Info */}
       <div className="space-y-4">
         <h3 className="font-semibold text-foreground border-b border-border/50 pb-2">

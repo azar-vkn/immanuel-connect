@@ -15,6 +15,7 @@ export interface Member {
   id: string;
   memberId: string; // IAG00001 (head) or IAG00001-1 (family member) format
   name: string;
+  tamilName?: string; // Name in Tamil script
   dob: string;
   gender: 'male' | 'female';
   phone: string;
@@ -26,6 +27,12 @@ export interface Member {
     state: string;
     country: string;
     pincode: string;
+  };
+  tamilAddress?: {
+    place?: string;
+    city?: string;
+    district?: string;
+    state?: string;
   };
   // Family-related fields
   familyId: string; // Base family ID (e.g., IAG00001)

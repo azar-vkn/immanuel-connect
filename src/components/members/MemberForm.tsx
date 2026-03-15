@@ -37,6 +37,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
 
   const [formData, setFormData] = useState({
     name: member?.name || '',
+    tamilName: member?.tamilName || '',
     dob: member?.dob || '',
     gender: member?.gender || 'male',
     phone: member?.phone || '',
@@ -46,6 +47,10 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     state: member?.address?.state || '',
     country: member?.address?.country || 'India',
     pincode: member?.address?.pincode || '',
+    tamilPlace: member?.tamilAddress?.place || '',
+    tamilCity: member?.tamilAddress?.city || '',
+    tamilDistrict: member?.tamilAddress?.district || '',
+    tamilState: member?.tamilAddress?.state || '',
     relationship: (member?.relationship || 'Head') as RelationshipType,
     maritalStatus: member?.maritalStatus || 'single',
     anniversaryDate: member?.anniversaryDate || '',

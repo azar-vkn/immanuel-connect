@@ -142,10 +142,18 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
                 {member.address.place && `${member.address.place}, `}
                 {member.address.city}
               </p>
+              <p className="text-muted-foreground italic">
+                {member.address.place && `${transliterateToTamil(member.address.place)}, `}
+                {transliterateToTamil(member.address.city)}
+              </p>
               <p className="text-muted-foreground">
                 {member.address.district && `${member.address.district}, `}
                 {member.address.state}
                 {member.address.pincode && ` - ${member.address.pincode}`}
+              </p>
+              <p className="text-muted-foreground italic">
+                {member.address.district && `${transliterateToTamil(member.address.district)}, `}
+                {transliterateToTamil(member.address.state)}
               </p>
               <p className="text-muted-foreground">{member.address.country}</p>
             </div>

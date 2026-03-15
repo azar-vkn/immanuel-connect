@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { User, Phone, MapPin, Calendar, Church, Users } from 'lucide-react';
 import { format } from 'date-fns';
+import { transliterateToTamil } from '@/lib/tamilTransliterate';
 
 interface MemberViewDialogProps {
   member: Member | null;

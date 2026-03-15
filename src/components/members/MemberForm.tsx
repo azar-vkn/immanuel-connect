@@ -37,6 +37,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
 
   const [formData, setFormData] = useState({
     name: member?.name || '',
+    tamilName: member?.tamilName || '',
     dob: member?.dob || '',
     gender: member?.gender || 'male',
     phone: member?.phone || '',
@@ -46,6 +47,10 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     state: member?.address?.state || '',
     country: member?.address?.country || 'India',
     pincode: member?.address?.pincode || '',
+    tamilPlace: member?.tamilAddress?.place || '',
+    tamilCity: member?.tamilAddress?.city || '',
+    tamilDistrict: member?.tamilAddress?.district || '',
+    tamilState: member?.tamilAddress?.state || '',
     relationship: (member?.relationship || 'Head') as RelationshipType,
     maritalStatus: member?.maritalStatus || 'single',
     anniversaryDate: member?.anniversaryDate || '',
@@ -169,6 +174,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
       id: member?.id || crypto.randomUUID(),
       memberId,
       name: formData.name,
+      tamilName: formData.tamilName || undefined,
       dob: formData.dob,
       gender: formData.gender as 'male' | 'female',
       phone: formData.phone,
@@ -180,6 +186,12 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
         country: formData.country,
         pincode: formData.pincode,
       },
+      tamilAddress: (formData.tamilPlace || formData.tamilCity || formData.tamilDistrict || formData.tamilState) ? {
+        place: formData.tamilPlace || undefined,
+        city: formData.tamilCity || undefined,
+        district: formData.tamilDistrict || undefined,
+        state: formData.tamilState || undefined,
+      } : undefined,
       familyId,
       isHeadOfFamily,
       relationship,
@@ -342,6 +354,16 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="tamilName">பெயர் (Tamil Name)</Label>
+            <Input
+              id="tamilName"
+              value={formData.tamilName}
+              onChange={(e) => setFormData({ ...formData, tamilName: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="தமிழில் பெயர்"
+            />
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="dob">Date of Birth *</Label>
             <Input
               id="dob"
@@ -429,6 +451,55 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
               value={formData.pincode}
               onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
               className="bg-secondary/50"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Tamil Address (Optional) */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-foreground border-b border-border/50 pb-2">
+          முகவரி (Tamil Address) <span className="text-xs text-muted-foreground font-normal">— Optional</span>
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="tamilPlace">இடம் (Place)</Label>
+            <Input
+              id="tamilPlace"
+              value={formData.tamilPlace}
+              onChange={(e) => setFormData({ ...formData, tamilPlace: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="தெரு / இடம்"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tamilCity">நகரம் (City)</Label>
+            <Input
+              id="tamilCity"
+              value={formData.tamilCity}
+              onChange={(e) => setFormData({ ...formData, tamilCity: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="நகரம்"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tamilDistrict">மாவட்டம் (District)</Label>
+            <Input
+              id="tamilDistrict"
+              value={formData.tamilDistrict}
+              onChange={(e) => setFormData({ ...formData, tamilDistrict: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="மாவட்டம்"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tamilState">மாநிலம் (State)</Label>
+            <Input
+              id="tamilState"
+              value={formData.tamilState}
+              onChange={(e) => setFormData({ ...formData, tamilState: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="மாநிலம்"
             />
           </div>
         </div>

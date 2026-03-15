@@ -354,6 +354,16 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="tamilName">பெயர் (Tamil Name)</Label>
+            <Input
+              id="tamilName"
+              value={formData.tamilName}
+              onChange={(e) => setFormData({ ...formData, tamilName: e.target.value })}
+              className="bg-secondary/50"
+              placeholder="தமிழில் பெயர்"
+            />
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="dob">Date of Birth *</Label>
             <Input
               id="dob"

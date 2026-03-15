@@ -143,8 +143,9 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
                 {member.address.city}
               </p>
               <p className="text-muted-foreground italic">
-                {member.address.place && `${transliterateToTamil(member.address.place)}, `}
-                {transliterateToTamil(member.address.city)}
+                {(member.tamilAddress?.place || (member.address.place && transliterateToTamil(member.address.place))) && 
+                  `${member.tamilAddress?.place || transliterateToTamil(member.address.place)}, `}
+                {member.tamilAddress?.city || transliterateToTamil(member.address.city)}
               </p>
               <p className="text-muted-foreground">
                 {member.address.district && `${member.address.district}, `}
@@ -152,8 +153,9 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
                 {member.address.pincode && ` - ${member.address.pincode}`}
               </p>
               <p className="text-muted-foreground italic">
-                {member.address.district && `${transliterateToTamil(member.address.district)}, `}
-                {transliterateToTamil(member.address.state)}
+                {(member.tamilAddress?.district || (member.address.district && transliterateToTamil(member.address.district))) && 
+                  `${member.tamilAddress?.district || transliterateToTamil(member.address.district)}, `}
+                {member.tamilAddress?.state || transliterateToTamil(member.address.state)}
               </p>
               <p className="text-muted-foreground">{member.address.country}</p>
             </div>

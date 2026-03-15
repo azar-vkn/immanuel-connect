@@ -57,6 +57,7 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold text-foreground">{member.name}</h2>
+              <p className="text-base text-muted-foreground">{transliterateToTamil(member.name)}</p>
               <p className="text-primary font-mono">{member.memberId}</p>
             </div>
             <div className="flex gap-2">

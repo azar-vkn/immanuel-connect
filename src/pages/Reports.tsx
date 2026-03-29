@@ -19,9 +19,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileBarChart, Download, Users, UserCheck, UserX, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { FellowshipReport } from '@/components/reports/FellowshipReport';
 
 const Reports: React.FC = () => {
   const [events, setEvents] = useState<ChurchEvent[]>([]);

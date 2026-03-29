@@ -123,137 +123,157 @@ const Reports: React.FC = () => {
         <p className="text-muted-foreground">Generate and export attendance reports</p>
       </div>
 
-      {/* Filters */}
+      {/* Event Selector */}
       <div className="glass rounded-xl p-6 animate-fade-in [animation-delay:100ms]">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label>Select Event</Label>
-            <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-              <SelectTrigger className="bg-secondary/50">
-                <SelectValue placeholder="Choose an event..." />
-              </SelectTrigger>
-              <SelectContent>
-                {events.map(event => (
-                  <SelectItem key={event.id} value={event.id}>
-                    {event.name} - {format(new Date(event.date), 'MMM dd, yyyy')}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Report Type</Label>
-            <Select value={reportType} onValueChange={(v) => setReportType(v as any)}>
-              <SelectTrigger className="bg-secondary/50">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    All Members
-                  </div>
+        <div className="space-y-2">
+          <Label>Select Event</Label>
+          <Select value={selectedEventId} onValueChange={setSelectedEventId}>
+            <SelectTrigger className="bg-secondary/50 max-w-md">
+              <SelectValue placeholder="Choose an event..." />
+            </SelectTrigger>
+            <SelectContent>
+              {events.map(event => (
+                <SelectItem key={event.id} value={event.id}>
+                  {event.name} - {format(new Date(event.date), 'MMM dd, yyyy')}
                 </SelectItem>
-                <SelectItem value="present">
-                  <div className="flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-emerald-400" />
-                    Present Only
-                  </div>
-                </SelectItem>
-                <SelectItem value="absent">
-                  <div className="flex items-center gap-2">
-                    <UserX className="w-4 h-4 text-red-400" />
-                    Absent Only
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-end">
-            <Button
-              onClick={handleExport}
-              disabled={!selectedEventId}
-              className="w-full gap-2 bg-primary hover:bg-primary/90"
-            >
-              <Download className="w-4 h-4" />
-              Export CSV
-            </Button>
-          </div>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {/* Stats Summary */}
       {selectedEventId && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in [animation-delay:200ms]">
-          <div className="glass rounded-xl p-4 text-center">
-            <p className="text-3xl font-bold text-foreground">{members.length}</p>
-            <p className="text-sm text-muted-foreground">Total Members</p>
-          </div>
-          <div className="glass rounded-xl p-4 text-center border-emerald-500/30">
-            <p className="text-3xl font-bold text-emerald-400">{presentCount}</p>
-            <p className="text-sm text-muted-foreground">Present</p>
-          </div>
-          <div className="glass rounded-xl p-4 text-center border-red-500/30">
-            <p className="text-3xl font-bold text-red-400">{absentCount}</p>
-            <p className="text-sm text-muted-foreground">Absent</p>
-          </div>
-        </div>
-      )}
+        <Tabs defaultValue="attendance" className="space-y-6">
+          <TabsList className="bg-secondary/50">
+            <TabsTrigger value="attendance">Attendance Report</TabsTrigger>
+            <TabsTrigger value="fellowship">Fellowship Report</TabsTrigger>
+          </TabsList>
 
-      {/* Report Table */}
-      {selectedEventId && (
-        <div className="glass rounded-xl overflow-hidden animate-fade-in [animation-delay:300ms]">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Member ID</TableHead>
-                <TableHead className="text-muted-foreground">Name</TableHead>
-                <TableHead className="text-muted-foreground">Phone</TableHead>
-                <TableHead className="text-muted-foreground">Team</TableHead>
-                {reportType === 'all' && (
-                  <TableHead className="text-muted-foreground">Status</TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reportData.map((member) => (
-                <TableRow key={member.id} className="border-border/30 hover:bg-secondary/30">
-                  <TableCell className="font-mono text-sm text-primary">
-                    {member.memberId}
-                  </TableCell>
-                  <TableCell className="font-medium">{member.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{member.phone}</TableCell>
-                  <TableCell>
-                    {member.team && (
-                      <Badge variant="outline" className="bg-secondary/50">
-                        {member.team}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  {reportType === 'all' && (
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={(member as any).isPresent ? 'badge-success' : 'bg-red-500/20 text-red-400 border-red-500/30'}
-                      >
-                        {(member as any).isPresent ? 'Present' : 'Absent'}
-                      </Badge>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {/* Attendance Report Tab */}
+          <TabsContent value="attendance" className="space-y-6">
+            {/* Filters */}
+            <div className="glass rounded-xl p-6 animate-fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>Report Type</Label>
+                  <Select value={reportType} onValueChange={(v) => setReportType(v as any)}>
+                    <SelectTrigger className="bg-secondary/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4" />
+                          All Members
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="present">
+                        <div className="flex items-center gap-2">
+                          <UserCheck className="w-4 h-4 text-emerald-400" />
+                          Present Only
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="absent">
+                        <div className="flex items-center gap-2">
+                          <UserX className="w-4 h-4 text-red-400" />
+                          Absent Only
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-          {reportData.length === 0 && (
-            <div className="p-12 text-center text-muted-foreground">
-              <FileBarChart className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              No data to display for the selected filters.
+                <div className="flex items-end">
+                  <Button
+                    onClick={handleExport}
+                    disabled={!selectedEventId}
+                    className="w-full gap-2 bg-primary hover:bg-primary/90"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export CSV
+                  </Button>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* Stats Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
+              <div className="glass rounded-xl p-4 text-center">
+                <p className="text-3xl font-bold text-foreground">{members.length}</p>
+                <p className="text-sm text-muted-foreground">Total Members</p>
+              </div>
+              <div className="glass rounded-xl p-4 text-center border-emerald-500/30">
+                <p className="text-3xl font-bold text-emerald-400">{presentCount}</p>
+                <p className="text-sm text-muted-foreground">Present</p>
+              </div>
+              <div className="glass rounded-xl p-4 text-center border-red-500/30">
+                <p className="text-3xl font-bold text-red-400">{absentCount}</p>
+                <p className="text-sm text-muted-foreground">Absent</p>
+              </div>
+            </div>
+
+            {/* Report Table */}
+            <div className="glass rounded-xl overflow-hidden animate-fade-in">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border/50 hover:bg-transparent">
+                    <TableHead className="text-muted-foreground">Member ID</TableHead>
+                    <TableHead className="text-muted-foreground">Name</TableHead>
+                    <TableHead className="text-muted-foreground">Phone</TableHead>
+                    <TableHead className="text-muted-foreground">Team</TableHead>
+                    {reportType === 'all' && (
+                      <TableHead className="text-muted-foreground">Status</TableHead>
+                    )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reportData.map((member) => (
+                    <TableRow key={member.id} className="border-border/30 hover:bg-secondary/30">
+                      <TableCell className="font-mono text-sm text-primary">
+                        {member.memberId}
+                      </TableCell>
+                      <TableCell className="font-medium">{member.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{member.phone}</TableCell>
+                      <TableCell>
+                        {member.team && (
+                          <Badge variant="outline" className="bg-secondary/50">
+                            {member.team}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      {reportType === 'all' && (
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={(member as any).isPresent ? 'badge-success' : 'bg-red-500/20 text-red-400 border-red-500/30'}
+                          >
+                            {(member as any).isPresent ? 'Present' : 'Absent'}
+                          </Badge>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {reportData.length === 0 && (
+                <div className="p-12 text-center text-muted-foreground">
+                  <FileBarChart className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  No data to display for the selected filters.
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Fellowship Report Tab */}
+          <TabsContent value="fellowship">
+            <FellowshipReport
+              members={members}
+              attendance={attendance}
+              selectedEventId={selectedEventId}
+            />
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );

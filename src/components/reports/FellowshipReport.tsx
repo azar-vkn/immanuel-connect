@@ -52,6 +52,7 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
   members,
   attendance,
   selectedEventId,
+  eventName,
 }) => {
   const data = useMemo(() => {
     const presentIds = new Set(

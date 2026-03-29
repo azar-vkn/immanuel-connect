@@ -8,6 +8,7 @@ interface FellowshipReportProps {
   members: Member[];
   attendance: Attendance[];
   selectedEventId: string;
+  eventName?: string;
 }
 
 type FellowshipCategory = 

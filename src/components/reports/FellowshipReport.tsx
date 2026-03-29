@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { Member, Attendance } from '@/types';
 import { differenceInYears } from 'date-fns';
-import { Users, UserCheck, UserX } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { UserCheck, UserX, Download } from 'lucide-react';
 
 interface FellowshipReportProps {
   members: Member[];

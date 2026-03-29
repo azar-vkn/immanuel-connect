@@ -271,6 +271,7 @@ const Reports: React.FC = () => {
               members={members}
               attendance={attendance}
               selectedEventId={selectedEventId}
+              eventName={selectedEvent ? `${selectedEvent.name}-${selectedEvent.date}` : ''}
             />
           </TabsContent>
         </Tabs>

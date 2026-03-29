@@ -1,8 +1,18 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Member, Attendance } from '@/types';
 import { differenceInYears } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { UserCheck, UserX, Download } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { UserCheck, UserX, Download, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface FellowshipReportProps {
   members: Member[];
@@ -20,15 +30,11 @@ type FellowshipCategory =
 
 const getCategoryForMember = (member: Member): FellowshipCategory => {
   const age = member.dob ? differenceInYears(new Date(), new Date(member.dob)) : 0;
-
   if (age < 13) return 'Children';
-
   const isMarried = member.maritalStatus === 'married';
-
   if (!isMarried && age < 40) {
     return member.gender === 'male' ? 'Youth Boys Fellowship' : 'Youth Girls Fellowship';
   }
-
   return member.gender === 'male' ? "Men's Fellowship" : "Women's Fellowship";
 };
 
@@ -48,17 +54,52 @@ const CATEGORY_COLORS: Record<FellowshipCategory, string> = {
   "Women's Fellowship": 'bg-purple-500/15 text-purple-400 border-purple-500/30',
 };
 
+const MemberTable: React.FC<{ members: Member[] }> = ({ members }) => {
+  if (members.length === 0) {
+    return <p className="text-sm text-muted-foreground text-center py-4">No members</p>;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="border-border/50 hover:bg-transparent">
+          <TableHead className="text-muted-foreground text-xs">S.No</TableHead>
+          <TableHead className="text-muted-foreground text-xs">Member ID</TableHead>
+          <TableHead className="text-muted-foreground text-xs">Name</TableHead>
+          <TableHead className="text-muted-foreground text-xs">Phone</TableHead>
+          <TableHead className="text-muted-foreground text-xs">Team</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {members.map((m, idx) => (
+          <TableRow key={m.id} className="border-border/30 hover:bg-secondary/30">
+            <TableCell className="text-sm text-muted-foreground">{idx + 1}</TableCell>
+            <TableCell className="font-mono text-sm text-primary">{m.memberId}</TableCell>
+            <TableCell className="font-medium text-sm">{m.name}</TableCell>
+            <TableCell className="text-sm text-muted-foreground">{m.phone}</TableCell>
+            <TableCell>
+              {m.team && (
+                <Badge variant="outline" className="bg-secondary/50 text-xs">{m.team}</Badge>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
 export const FellowshipReport: React.FC<FellowshipReportProps> = ({
   members,
   attendance,
   selectedEventId,
   eventName,
 }) => {
+  const [expandedCategory, setExpandedCategory] = useState<FellowshipCategory | null>(null);
+
   const data = useMemo(() => {
     const presentIds = new Set(
       attendance.filter(a => a.eventId === selectedEventId).map(a => a.memberId)
     );
-
     const categories: Record<FellowshipCategory, { present: Member[]; absent: Member[] }> = {
       'Children': { present: [], absent: [] },
       'Youth Boys Fellowship': { present: [], absent: [] },
@@ -66,7 +107,6 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
       "Men's Fellowship": { present: [], absent: [] },
       "Women's Fellowship": { present: [], absent: [] },
     };
-
     members.forEach(m => {
       const cat = getCategoryForMember(m);
       if (presentIds.has(m.id)) {
@@ -75,7 +115,6 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
         categories[cat].absent.push(m);
       }
     });
-
     return categories;
   }, [members, attendance, selectedEventId]);
 
@@ -85,7 +124,6 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
   const handleExport = () => {
     const headers = ['Fellowship', 'Member ID', 'Name', 'Phone', 'Team', 'Status'];
     const rows: string[][] = [];
-
     CATEGORY_ORDER.forEach(cat => {
       data[cat].present.forEach(m => {
         rows.push([cat, m.memberId, m.name, m.phone, m.team || '-', 'Present']);
@@ -94,8 +132,6 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
         rows.push([cat, m.memberId, m.name, m.phone, m.team || '-', 'Absent']);
       });
     });
-
-    // Add summary rows
     rows.push([]);
     rows.push(['Fellowship', 'Total', 'Present', 'Absent', 'Attendance %']);
     CATEGORY_ORDER.forEach(cat => {
@@ -104,11 +140,7 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
       rows.push([cat, String(total), String(data[cat].present.length), String(data[cat].absent.length), `${pct}%`]);
     });
     rows.push(['Total', String(members.length), String(totalPresent), String(totalAbsent), `${members.length > 0 ? Math.round((totalPresent / members.length) * 100) : 0}%`]);
-
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell || ''}"`).join(','))
-      .join('\n');
-
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell || ''}"`).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -116,6 +148,10 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
     a.download = `fellowship-report-${eventName || selectedEventId}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const toggleCategory = (cat: FellowshipCategory) => {
+    setExpandedCategory(prev => prev === cat ? null : cat);
   };
 
   return (
@@ -127,6 +163,7 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
           Export Fellowship CSV
         </Button>
       </div>
+
       {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-4 text-center">
@@ -143,48 +180,82 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
         </div>
       </div>
 
-      {/* Category Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {/* Category Cards */}
+      <div className="space-y-4">
         {CATEGORY_ORDER.map(cat => {
           const { present, absent } = data[cat];
           const total = present.length + absent.length;
           const pct = total > 0 ? Math.round((present.length / total) * 100) : 0;
+          const isExpanded = expandedCategory === cat;
 
           return (
-            <div key={cat} className={`glass rounded-xl p-5 border ${CATEGORY_COLORS[cat]}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-serif font-semibold text-base">{cat}</h3>
-                <span className="text-xs font-medium opacity-80">{total} members</span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-2 rounded-full bg-secondary/50 mb-4">
-                <div
-                  className="h-2 rounded-full bg-current transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-emerald-400" />
-                  <div>
-                    <p className="text-lg font-bold text-foreground">{present.length}</p>
-                    <p className="text-xs text-muted-foreground">Present</p>
-                  </div>
+            <div key={cat} className={`glass rounded-xl border overflow-hidden ${CATEGORY_COLORS[cat]}`}>
+              {/* Card Header - clickable */}
+              <button
+                onClick={() => toggleCategory(cat)}
+                className="w-full p-5 flex items-center justify-between text-left transition-colors hover:bg-secondary/10"
+              >
+                <div className="flex items-center gap-4">
+                  <h3 className="font-serif font-semibold text-base">{cat}</h3>
+                  <span className="text-xs font-medium opacity-80">{total} members</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <UserX className="w-4 h-4 text-red-400" />
-                  <div>
-                    <p className="text-lg font-bold text-foreground">{absent.length}</p>
-                    <p className="text-xs text-muted-foreground">Absent</p>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-emerald-400" />
+                      <span className="text-sm font-bold text-foreground">{present.length}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <UserX className="w-4 h-4 text-red-400" />
+                      <span className="text-sm font-bold text-foreground">{absent.length}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{pct}%</span>
                   </div>
+                  {isExpanded ? (
+                    <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                  )}
                 </div>
-              </div>
+              </button>
 
-              <p className="text-xs text-muted-foreground mt-3 text-right">
-                {pct}% attendance
-              </p>
+              {/* Expanded Detail */}
+              {isExpanded && (
+                <div className="border-t border-border/30 p-4 animate-fade-in">
+                  {/* Progress bar */}
+                  <div className="w-full h-2 rounded-full bg-secondary/50 mb-4">
+                    <div
+                      className="h-2 rounded-full bg-current transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+
+                  <Tabs defaultValue="participants" className="space-y-4">
+                    <TabsList className="bg-secondary/50">
+                      <TabsTrigger value="participants" className="gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        Participants ({present.length})
+                      </TabsTrigger>
+                      <TabsTrigger value="absentees" className="gap-1.5">
+                        <UserX className="w-3.5 h-3.5" />
+                        Absentees ({absent.length})
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="participants">
+                      <div className="glass rounded-lg overflow-hidden">
+                        <MemberTable members={present} />
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="absentees">
+                      <div className="glass rounded-lg overflow-hidden">
+                        <MemberTable members={absent} />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              )}
             </div>
           );
         })}

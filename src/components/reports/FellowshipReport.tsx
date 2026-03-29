@@ -82,8 +82,51 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
   const totalPresent = Object.values(data).reduce((s, c) => s + c.present.length, 0);
   const totalAbsent = Object.values(data).reduce((s, c) => s + c.absent.length, 0);
 
+  const handleExport = () => {
+    const headers = ['Fellowship', 'Member ID', 'Name', 'Phone', 'Team', 'Status'];
+    const rows: string[][] = [];
+
+    CATEGORY_ORDER.forEach(cat => {
+      data[cat].present.forEach(m => {
+        rows.push([cat, m.memberId, m.name, m.phone, m.team || '-', 'Present']);
+      });
+      data[cat].absent.forEach(m => {
+        rows.push([cat, m.memberId, m.name, m.phone, m.team || '-', 'Absent']);
+      });
+    });
+
+    // Add summary rows
+    rows.push([]);
+    rows.push(['Fellowship', 'Total', 'Present', 'Absent', 'Attendance %']);
+    CATEGORY_ORDER.forEach(cat => {
+      const total = data[cat].present.length + data[cat].absent.length;
+      const pct = total > 0 ? Math.round((data[cat].present.length / total) * 100) : 0;
+      rows.push([cat, String(total), String(data[cat].present.length), String(data[cat].absent.length), `${pct}%`]);
+    });
+    rows.push(['Total', String(members.length), String(totalPresent), String(totalAbsent), `${members.length > 0 ? Math.round((totalPresent / members.length) * 100) : 0}%`]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell || ''}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fellowship-report-${eventName || selectedEventId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in [animation-delay:200ms]">
+      {/* Export Button */}
+      <div className="flex justify-end">
+        <Button onClick={handleExport} className="gap-2 bg-primary hover:bg-primary/90">
+          <Download className="w-4 h-4" />
+          Export Fellowship CSV
+        </Button>
+      </div>
       {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-4 text-center">

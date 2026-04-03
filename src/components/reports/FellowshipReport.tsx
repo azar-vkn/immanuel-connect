@@ -150,6 +150,22 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleExportCategory = (cat: FellowshipCategory, type: 'present' | 'absent' | 'all') => {
+    const { present, absent } = data[cat];
+    const headers = ['S.No', 'Member ID', 'Name', 'Phone', 'Team'];
+    const list = type === 'present' ? present : type === 'absent' ? absent : [...present, ...absent];
+    const statusLabel = type === 'present' ? 'Participants' : type === 'absent' ? 'Absentees' : 'All';
+    const rows = list.map((m, idx) => [String(idx + 1), m.memberId, m.name, m.phone, m.team || '-']);
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${cat}-${statusLabel}-${eventName || selectedEventId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const toggleCategory = (cat: FellowshipCategory) => {
     setExpandedCategory(prev => prev === cat ? null : cat);
   };
@@ -231,16 +247,28 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
                   </div>
 
                   <Tabs defaultValue="participants" className="space-y-4">
-                    <TabsList className="bg-secondary/50">
-                      <TabsTrigger value="participants" className="gap-1.5">
-                        <UserCheck className="w-3.5 h-3.5" />
-                        Participants ({present.length})
-                      </TabsTrigger>
-                      <TabsTrigger value="absentees" className="gap-1.5">
-                        <UserX className="w-3.5 h-3.5" />
-                        Absentees ({absent.length})
-                      </TabsTrigger>
-                    </TabsList>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <TabsList className="bg-secondary/50">
+                        <TabsTrigger value="participants" className="gap-1.5">
+                          <UserCheck className="w-3.5 h-3.5" />
+                          Participants ({present.length})
+                        </TabsTrigger>
+                        <TabsTrigger value="absentees" className="gap-1.5">
+                          <UserX className="w-3.5 h-3.5" />
+                          Absentees ({absent.length})
+                        </TabsTrigger>
+                      </TabsList>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleExportCategory(cat, 'present')} className="gap-1.5 text-xs">
+                          <Download className="w-3.5 h-3.5" />
+                          Export Participants
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleExportCategory(cat, 'absent')} className="gap-1.5 text-xs">
+                          <Download className="w-3.5 h-3.5" />
+                          Export Absentees
+                        </Button>
+                      </div>
+                    </div>
 
                     <TabsContent value="participants">
                       <div className="glass rounded-lg overflow-hidden">

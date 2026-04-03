@@ -246,10 +246,30 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
                     />
                   </div>
 
-                  <Tabs defaultValue="participants" className="space-y-4">
-                    <TabsList className="bg-secondary/50">
-                      <TabsTrigger value="participants" className="gap-1.5">
-                        <UserCheck className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between">
+                    <Tabs defaultValue="participants" className="space-y-4 flex-1">
+                      <div className="flex items-center justify-between">
+                        <TabsList className="bg-secondary/50">
+                          <TabsTrigger value="participants" className="gap-1.5">
+                            <UserCheck className="w-3.5 h-3.5" />
+                            Participants ({present.length})
+                          </TabsTrigger>
+                          <TabsTrigger value="absentees" className="gap-1.5">
+                            <UserX className="w-3.5 h-3.5" />
+                            Absentees ({absent.length})
+                          </TabsTrigger>
+                        </TabsList>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleExportCategory(cat, 'present')} className="gap-1.5 text-xs">
+                            <Download className="w-3.5 h-3.5" />
+                            Participants
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleExportCategory(cat, 'absent')} className="gap-1.5 text-xs">
+                            <Download className="w-3.5 h-3.5" />
+                            Absentees
+                          </Button>
+                        </div>
+                      </div>
                         Participants ({present.length})
                       </TabsTrigger>
                       <TabsTrigger value="absentees" className="gap-1.5">

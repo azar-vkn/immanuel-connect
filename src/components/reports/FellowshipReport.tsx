@@ -150,6 +150,22 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleExportCategory = (cat: FellowshipCategory, type: 'present' | 'absent' | 'all') => {
+    const { present, absent } = data[cat];
+    const headers = ['S.No', 'Member ID', 'Name', 'Phone', 'Team'];
+    const list = type === 'present' ? present : type === 'absent' ? absent : [...present, ...absent];
+    const statusLabel = type === 'present' ? 'Participants' : type === 'absent' ? 'Absentees' : 'All';
+    const rows = list.map((m, idx) => [String(idx + 1), m.memberId, m.name, m.phone, m.team || '-']);
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${cat}-${statusLabel}-${eventName || selectedEventId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const toggleCategory = (cat: FellowshipCategory) => {
     setExpandedCategory(prev => prev === cat ? null : cat);
   };

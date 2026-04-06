@@ -54,9 +54,9 @@ export const BirthdayCard: React.FC<BirthdayCardProps> = ({ members, type }) => 
                   <p className="font-medium text-sm text-foreground">{member.name}</p>
                   <p className="text-xs text-muted-foreground">{member.phone}</p>
                 </div>
-                {date && (
+                {date && safeFormatDate(date, 'MMM dd') && (
                   <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
-                    {format(parseISO(date), 'MMM dd')}
+                    {safeFormatDate(date, 'MMM dd')}
                   </span>
                 )}
               </div>

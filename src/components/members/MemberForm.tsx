@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Member, MemberStatus, RelationshipType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -14,7 +16,7 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { teams } from '@/data/mockData';
 import { getMembers } from '@/services/firestore';
-import { Search } from 'lucide-react';
+import { Search, AlertTriangle, Users, UserPlus, Crown, ChevronDown, ChevronUp, Phone, User } from 'lucide-react';
 
 interface MemberFormProps {
   member?: Member;
@@ -28,12 +30,32 @@ const RELATIONSHIP_OPTIONS: RelationshipType[] = [
   'Head', 'Wife', 'Husband', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Other'
 ];
 
+// Debounce hook
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
+interface DuplicateWarning {
+  type: 'phone' | 'name_dob';
+  message: string;
+  matchingMember: Member;
+  familyHead?: Member;
+}
+
 export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel }) => {
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [memberCategory, setMemberCategory] = useState<MemberCategory>('new_family_head');
   const [selectedFamilyHead, setSelectedFamilyHead] = useState<Member | null>(null);
   const [familyHeadSearch, setFamilyHeadSearch] = useState('');
   const [showFamilyHeadDropdown, setShowFamilyHeadDropdown] = useState(false);
+  const [showFamilyPreview, setShowFamilyPreview] = useState(false);
+  const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateWarning[]>([]);
+  const [dismissedWarnings, setDismissedWarnings] = useState<Set<string>>(new Set());
 
   const [formData, setFormData] = useState({
     name: member?.name || '',
@@ -64,7 +86,13 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
 
   const [nextBaseMemberId, setNextBaseMemberId] = useState<string>('IAG00001');
 
-  // Fetch all members for family head selection and ID generation
+  // Debounced values for duplicate detection
+  const debouncedPhone = useDebounce(formData.phone, 400);
+  const debouncedName = useDebounce(formData.name, 400);
+  const debouncedDob = useDebounce(formData.dob, 400);
+  const debouncedFamilySearch = useDebounce(familyHeadSearch, 300);
+
+  // Fetch all members
   useEffect(() => {
     const fetchMembers = async () => {
       try {
@@ -72,41 +100,87 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
         setAllMembers(existingMembers);
         
         if (!member) {
-          // Calculate next base member ID for new family heads
           const baseNumbers = existingMembers
             .map(m => {
-              // Extract base number from either IAG00001 or IAG00001-1 format
               const match = m.memberId?.match(/^IAG(\d+)/);
               return match ? parseInt(match[1], 10) : 0;
             })
             .filter(n => !isNaN(n));
           
           const maxNumber = baseNumbers.length > 0 ? Math.max(...baseNumbers) : 0;
-          const nextNumber = maxNumber + 1;
-          setNextBaseMemberId(`IAG${nextNumber.toString().padStart(5, '0')}`);
+          setNextBaseMemberId(`IAG${(maxNumber + 1).toString().padStart(5, '0')}`);
         }
       } catch (error) {
-        console.error('Error fetching members for ID generation:', error);
+        console.error('Error fetching members:', error);
         setNextBaseMemberId('IAG00001');
       }
     };
     fetchMembers();
   }, [member]);
 
-  // Get all family heads for selection
+  // Duplicate detection
+  useEffect(() => {
+    if (member) return; // Skip for edits
+    const warnings: DuplicateWarning[] = [];
+
+    // Phone match
+    if (debouncedPhone.length >= 8) {
+      const phoneMatch = allMembers.find(m => m.phone === debouncedPhone);
+      if (phoneMatch) {
+        const head = allMembers.find(h => h.isHeadOfFamily && h.familyId === phoneMatch.familyId);
+        warnings.push({
+          type: 'phone',
+          message: `Phone number "${debouncedPhone}" already belongs to ${phoneMatch.name} (${phoneMatch.memberId})`,
+          matchingMember: phoneMatch,
+          familyHead: head || undefined,
+        });
+      }
+    }
+
+    // Name + DOB match
+    if (debouncedName.length >= 3 && debouncedDob) {
+      const nameMatch = allMembers.find(m =>
+        m.name.toLowerCase() === debouncedName.toLowerCase() && m.dob === debouncedDob
+      );
+      if (nameMatch) {
+        const head = allMembers.find(h => h.isHeadOfFamily && h.familyId === nameMatch.familyId);
+        warnings.push({
+          type: 'name_dob',
+          message: `A member named "${nameMatch.name}" with same DOB already exists (${nameMatch.memberId})`,
+          matchingMember: nameMatch,
+          familyHead: head || undefined,
+        });
+      }
+    }
+
+    setDuplicateWarnings(warnings);
+  }, [debouncedPhone, debouncedName, debouncedDob, allMembers, member]);
+
+  // Get all family heads
   const familyHeads = useMemo(() => {
     return allMembers.filter(m => m.isHeadOfFamily);
   }, [allMembers]);
 
-  // Filter family heads based on search
+  // Filter family heads based on debounced search (by name, phone, memberId)
   const filteredFamilyHeads = useMemo(() => {
-    if (!familyHeadSearch.trim()) return familyHeads;
-    const query = familyHeadSearch.toLowerCase();
-    return familyHeads.filter(h => 
-      h.name.toLowerCase().includes(query) || 
-      h.memberId.toLowerCase().includes(query)
+    if (!debouncedFamilySearch.trim()) return familyHeads;
+    const query = debouncedFamilySearch.toLowerCase();
+    return familyHeads.filter(h =>
+      h.name.toLowerCase().includes(query) ||
+      h.memberId.toLowerCase().includes(query) ||
+      h.phone.includes(query)
     );
-  }, [familyHeads, familyHeadSearch]);
+  }, [familyHeads, debouncedFamilySearch]);
+
+  // Get family members count for a family
+  const getFamilyMemberCount = useCallback((familyId: string) => {
+    return allMembers.filter(m => m.familyId === familyId).length;
+  }, [allMembers]);
+
+  // Get family members for preview
+  const getFamilyMembers = useCallback((familyId: string) => {
+    return allMembers.filter(m => m.familyId === familyId);
+  }, [allMembers]);
 
   // Generate next member ID for existing family
   const getNextFamilyMemberId = (familyId: string): string => {
@@ -137,8 +211,26 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     }
   }, [selectedFamilyHead, memberCategory]);
 
+  // Link to existing family from duplicate warning
+  const handleLinkToFamily = (warning: DuplicateWarning) => {
+    const head = warning.familyHead || warning.matchingMember;
+    if (head) {
+      setMemberCategory('existing_family_member');
+      setSelectedFamilyHead(head.isHeadOfFamily ? head : (allMembers.find(m => m.isHeadOfFamily && m.familyId === head.familyId) || head));
+      setFamilyHeadSearch(head.name);
+      setShowFamilyHeadDropdown(false);
+      setDismissedWarnings(prev => new Set([...prev, `${warning.type}-${warning.matchingMember.id}`]));
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation for existing family
+    if (!member && memberCategory === 'existing_family_member') {
+      if (!selectedFamilyHead) return;
+      if (formData.relationship === 'Head') return;
+    }
     
     let memberId: string;
     let familyId: string;
@@ -146,24 +238,17 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
     let relationship: RelationshipType;
 
     if (member) {
-      // Editing existing member - preserve IDs
       memberId = member.memberId;
-      // For backward compatibility: if familyId is missing, use memberId as familyId
       familyId = member.familyId || member.memberId;
-      // For backward compatibility: if isHeadOfFamily is missing, assume true if no dash in memberId
       isHeadOfFamily = member.isHeadOfFamily ?? !member.memberId.includes('-');
       relationship = formData.relationship;
     } else if (memberCategory === 'new_family_head') {
-      // New family head
       memberId = nextBaseMemberId;
       familyId = nextBaseMemberId;
       isHeadOfFamily = true;
       relationship = 'Head';
     } else {
-      // Existing family member
-      if (!selectedFamilyHead) {
-        return; // Should not happen due to form validation
-      }
+      if (!selectedFamilyHead) return;
       familyId = selectedFamilyHead.familyId || selectedFamilyHead.memberId;
       memberId = getNextFamilyMemberId(familyId);
       isHeadOfFamily = false;
@@ -211,13 +296,15 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
   };
 
   const isEditMode = !!member;
+  const activeWarnings = duplicateWarnings.filter(w => !dismissedWarnings.has(`${w.type}-${w.matchingMember.id}`));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Member Category - Only show when adding new member */}
       {!isEditMode && (
         <div className="space-y-4">
-          <h3 className="font-semibold text-foreground border-b border-border/50 pb-2">
+          <h3 className="font-semibold text-foreground border-b border-border/50 pb-2 flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary" />
             Member Category
           </h3>
           <RadioGroup
@@ -226,6 +313,7 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
               setMemberCategory(value);
               setSelectedFamilyHead(null);
               setFamilyHeadSearch('');
+              setShowFamilyPreview(false);
               if (value === 'new_family_head') {
                 setFormData(prev => ({ ...prev, relationship: 'Head' }));
               } else {
@@ -234,79 +322,181 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
             }}
             className="flex flex-col gap-3"
           >
-            <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/50 cursor-pointer">
-              <RadioGroupItem value="new_family_head" id="new_family_head" />
+            <div className={`flex items-start space-x-3 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+              memberCategory === 'new_family_head'
+                ? 'border-primary bg-primary/5 shadow-sm'
+                : 'border-border/50 bg-secondary/30 hover:bg-secondary/50'
+            }`}>
+              <RadioGroupItem value="new_family_head" id="new_family_head" className="mt-0.5" />
               <Label htmlFor="new_family_head" className="cursor-pointer flex-1">
-                <span className="font-medium">New Family (Head)</span>
-                <p className="text-sm text-muted-foreground">Create a new family with this member as the head</p>
+                <div className="flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-amber-500" />
+                  <span className="font-medium">Create New Family</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">This member becomes the Family Head with a new Family ID</p>
                 {memberCategory === 'new_family_head' && (
-                  <span className="text-xs text-primary mt-1 block">
-                    Member ID will be: {nextBaseMemberId}
-                  </span>
+                  <Badge variant="outline" className="mt-2 text-primary border-primary/30">
+                    Member ID: {nextBaseMemberId}
+                  </Badge>
                 )}
               </Label>
             </div>
-            <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/50 bg-secondary/30 hover:bg-secondary/50 cursor-pointer">
-              <RadioGroupItem value="existing_family_member" id="existing_family_member" />
+
+            <div className={`flex items-start space-x-3 p-4 rounded-lg border-2 transition-all cursor-pointer ${
+              memberCategory === 'existing_family_member'
+                ? 'border-primary bg-primary/5 shadow-sm'
+                : 'border-border/50 bg-secondary/30 hover:bg-secondary/50'
+            }`}>
+              <RadioGroupItem value="existing_family_member" id="existing_family_member" className="mt-0.5" />
               <Label htmlFor="existing_family_member" className="cursor-pointer flex-1">
-                <span className="font-medium">Existing Family Member</span>
-                <p className="text-sm text-muted-foreground">Add this member to an existing family</p>
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-blue-500" />
+                  <span className="font-medium">Add to Existing Family</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">Link this member to an existing family</p>
               </Label>
             </div>
           </RadioGroup>
 
-          {/* Family Head Selection - Only show when adding to existing family */}
+          {/* Family Head Selection */}
           {memberCategory === 'existing_family_member' && (
-            <div className="space-y-2">
-              <Label>Select Family Head *</Label>
+            <div className="space-y-3 p-4 rounded-lg border border-border/50 bg-secondary/20">
+              <Label className="font-medium">Select Family Head <span className="text-destructive">*</span></Label>
               <div className="relative">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search by name or member ID..."
+                    placeholder="Search by name, phone, or member ID..."
                     value={familyHeadSearch}
                     onChange={(e) => {
                       setFamilyHeadSearch(e.target.value);
                       setShowFamilyHeadDropdown(true);
+                      if (selectedFamilyHead && e.target.value !== selectedFamilyHead.name) {
+                        setSelectedFamilyHead(null);
+                        setShowFamilyPreview(false);
+                      }
                     }}
                     onFocus={() => setShowFamilyHeadDropdown(true)}
-                    className="pl-10 bg-secondary/50"
+                    className="pl-10 bg-background"
                   />
                 </div>
-                {showFamilyHeadDropdown && filteredFamilyHeads.length > 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {filteredFamilyHeads.map((head) => (
-                      <button
-                        key={head.id}
-                        type="button"
-                        className="w-full px-4 py-2 text-left hover:bg-secondary/50 flex justify-between items-center"
-                        onClick={() => {
-                          setSelectedFamilyHead(head);
-                          setFamilyHeadSearch(head.name);
-                          setShowFamilyHeadDropdown(false);
-                        }}
-                      >
-                        <span>{head.name}</span>
-                        <span className="text-xs text-muted-foreground">{head.memberId}</span>
-                      </button>
-                    ))}
+                {showFamilyHeadDropdown && !selectedFamilyHead && filteredFamilyHeads.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                    {filteredFamilyHeads.map((head) => {
+                      const count = getFamilyMemberCount(head.familyId);
+                      return (
+                        <button
+                          key={head.id}
+                          type="button"
+                          className="w-full px-4 py-3 text-left hover:bg-accent/50 flex items-center gap-3 border-b border-border/30 last:border-b-0 transition-colors"
+                          onClick={() => {
+                            setSelectedFamilyHead(head);
+                            setFamilyHeadSearch(head.name);
+                            setShowFamilyHeadDropdown(false);
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                            <User className="w-4 h-4 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{head.name} Family</div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-2">
+                              <span>Head: {head.name}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <Phone className="w-3 h-3" />
+                                {head.phone}
+                              </span>
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className="text-xs shrink-0">
+                            {count} {count === 1 ? 'member' : 'members'}
+                          </Badge>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {showFamilyHeadDropdown && !selectedFamilyHead && familyHeadSearch.trim() && filteredFamilyHeads.length === 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg p-4 text-center text-sm text-muted-foreground">
+                    No families found matching "{familyHeadSearch}"
                   </div>
                 )}
               </div>
+
+              {/* Selected Family Card */}
               {selectedFamilyHead && (
-                <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
-                  <p className="text-sm">
-                    <span className="font-medium">Selected Family:</span> {selectedFamilyHead.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Family ID: {selectedFamilyHead.familyId} • 
-                    New Member ID will be: {getNextFamilyMemberId(selectedFamilyHead.familyId)}
-                  </p>
+                <div className="rounded-lg border-2 border-primary/30 bg-primary/5 overflow-hidden">
+                  <div className="p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Crown className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{selectedFamilyHead.name} Family</p>
+                        <p className="text-xs text-muted-foreground">
+                          {selectedFamilyHead.memberId} • {selectedFamilyHead.phone} •{' '}
+                          {getFamilyMemberCount(selectedFamilyHead.familyId)} members
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowFamilyPreview(!showFamilyPreview)}
+                        className="text-xs"
+                      >
+                        {showFamilyPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        {showFamilyPreview ? 'Hide' : 'View'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedFamilyHead(null);
+                          setFamilyHeadSearch('');
+                          setShowFamilyPreview(false);
+                        }}
+                        className="text-xs text-destructive hover:text-destructive"
+                      >
+                        Change
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Family Members Preview */}
+                  {showFamilyPreview && (
+                    <div className="border-t border-primary/20 p-3 bg-background/50">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Family Members</p>
+                      <div className="space-y-1.5">
+                        {getFamilyMembers(selectedFamilyHead.familyId).map(fm => (
+                          <div key={fm.id} className="flex items-center justify-between text-sm px-2 py-1.5 rounded bg-secondary/30">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{fm.name}</span>
+                              {fm.isHeadOfFamily && (
+                                <Badge variant="outline" className="text-[10px] py-0 px-1">Head</Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">{fm.relationship} • {fm.memberId}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        <Badge variant="outline" className="text-xs text-primary border-primary/30">
+                          New Member ID: {getNextFamilyMemberId(selectedFamilyHead.familyId)}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
+
               {familyHeads.length === 0 && (
                 <p className="text-sm text-muted-foreground italic">
-                  No family heads found. Please add a family head first.
+                  No family heads found. Please create a new family first.
                 </p>
               )}
             </div>
@@ -317,7 +507,9 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
       {/* Relationship - Show when editing or adding to existing family */}
       {(isEditMode || memberCategory === 'existing_family_member') && (
         <div className="space-y-2">
-          <Label htmlFor="relationship">Relationship to Family Head *</Label>
+          <Label htmlFor="relationship">
+            Relationship to Family Head <span className="text-destructive">*</span>
+          </Label>
           <Select
             value={formData.relationship}
             onValueChange={(value: RelationshipType) => setFormData({ ...formData, relationship: value })}
@@ -334,6 +526,51 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
               ))}
             </SelectContent>
           </Select>
+          {!isEditMode && memberCategory === 'existing_family_member' && formData.relationship === 'Head' && (
+            <p className="text-xs text-destructive">Please select a valid relationship</p>
+          )}
+        </div>
+      )}
+
+      {/* Duplicate Detection Warnings */}
+      {!isEditMode && activeWarnings.length > 0 && (
+        <div className="space-y-2">
+          {activeWarnings.map((warning, idx) => (
+            <Alert key={idx} className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription>
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    ⚠ Possible duplicate detected
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">{warning.message}</p>
+                  <div className="flex gap-2">
+                    {warning.familyHead && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs border-amber-500/50 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                        onClick={() => handleLinkToFamily(warning)}
+                      >
+                        <UserPlus className="w-3 h-3 mr-1" />
+                        Add to {warning.familyHead.name}'s family
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setDismissedWarnings(prev => new Set([...prev, `${warning.type}-${warning.matchingMember.id}`]))}
+                    >
+                      Continue as new
+                    </Button>
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          ))}
         </div>
       )}
 
@@ -641,7 +878,10 @@ export const MemberForm: React.FC<MemberFormProps> = ({ member, onSave, onCancel
         <Button 
           type="submit" 
           className="bg-primary hover:bg-primary/90"
-          disabled={!isEditMode && memberCategory === 'existing_family_member' && !selectedFamilyHead}
+          disabled={
+            !isEditMode && memberCategory === 'existing_family_member' && 
+            (!selectedFamilyHead || formData.relationship === 'Head')
+          }
         >
           {member ? 'Update Member' : 'Add Member'}
         </Button>

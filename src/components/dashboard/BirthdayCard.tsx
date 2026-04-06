@@ -1,7 +1,22 @@
 import React from 'react';
 import { Member } from '@/types';
 import { Cake, Gift } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, isValid } from 'date-fns';
+
+const safeFormatDate = (dateValue: string | { seconds: number } | null | undefined, fmt: string): string | null => {
+  if (!dateValue) return null;
+  try {
+    let d: Date;
+    if (typeof dateValue === 'object' && 'seconds' in dateValue) {
+      d = new Date(dateValue.seconds * 1000);
+    } else {
+      d = new Date(dateValue);
+    }
+    return isValid(d) ? format(d, fmt) : null;
+  } catch {
+    return null;
+  }
+};
 
 interface BirthdayCardProps {
   members: Member[];

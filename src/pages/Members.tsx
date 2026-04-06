@@ -979,7 +979,12 @@ const Members: React.FC = () => {
                   baptismStatus: ((r.baptismStatus || 'not_baptized') as any),
                   baptismDate: r.baptismDate || undefined,
                   churchRole: ((r.churchRole || 'attendee') as any),
-                  team: r.team || undefined,
+                  team: (() => {
+                    const raw = (r.team ?? '').trim();
+                    if (!raw) return 'Unassigned';
+                    if (raw.toLowerCase() === 'zone') return 'Team';
+                    return raw.charAt(0).toUpperCase() + raw.slice(1);
+                  })(),
                   status: ((r.status || 'regular') as any),
                   remarks: r.remarks || undefined,
                   createdAt: new Date().toISOString(),

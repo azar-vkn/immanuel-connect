@@ -78,7 +78,7 @@ function autoMatch(fileColumns: string[]): Record<string, string> {
     baptismStatus: ['baptismstatus', 'baptism status', 'baptism'],
     baptismDate: ['baptismdate', 'baptism date'],
     churchRole: ['churchrole', 'church role', 'role'],
-    team: ['team', 'group', 'cell'],
+    team: ['team', 'group', 'cell', 'zonal', 'zone'],
     status: ['status', 'memberstatus', 'member status'],
     remarks: ['remarks', 'notes', 'comment', 'comments'],
     additionalPhones: ['additionalphones', 'otherphones', 'phone2', 'additional phones'],

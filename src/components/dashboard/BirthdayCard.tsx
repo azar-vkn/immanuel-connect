@@ -1,7 +1,22 @@
 import React from 'react';
 import { Member } from '@/types';
 import { Cake, Gift } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, isValid } from 'date-fns';
+
+const safeFormatDate = (dateValue: string | { seconds: number } | null | undefined, fmt: string): string | null => {
+  if (!dateValue) return null;
+  try {
+    let d: Date;
+    if (typeof dateValue === 'object' && 'seconds' in dateValue) {
+      d = new Date(dateValue.seconds * 1000);
+    } else {
+      d = new Date(dateValue);
+    }
+    return isValid(d) ? format(d, fmt) : null;
+  } catch {
+    return null;
+  }
+};
 
 interface BirthdayCardProps {
   members: Member[];
@@ -39,9 +54,9 @@ export const BirthdayCard: React.FC<BirthdayCardProps> = ({ members, type }) => 
                   <p className="font-medium text-sm text-foreground">{member.name}</p>
                   <p className="text-xs text-muted-foreground">{member.phone}</p>
                 </div>
-                {date && (
+                {date && safeFormatDate(date, 'MMM dd') && (
                   <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
-                    {format(parseISO(date), 'MMM dd')}
+                    {safeFormatDate(date, 'MMM dd')}
                   </span>
                 )}
               </div>

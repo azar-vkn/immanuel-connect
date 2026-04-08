@@ -927,6 +927,42 @@ const Members: React.FC = () => {
         onConfirm={async (mapping) => {
           setShowMapperDialog(false);
           try {
+            // Helper: treat N/A, empty, etc. as null
+            const clean = (val: string | undefined): string => {
+              const v = (val ?? '').trim();
+              if (!v || v.toLowerCase() === 'n/a' || v.toLowerCase() === 'na' || v === '0000-00-00') return '';
+              return v;
+            };
+
+            // Helper: parse dates in M/D/YY or various formats
+            const parseExcelDate = (val: string | undefined): string => {
+              const v = clean(val);
+              if (!v) return '';
+              // Try M/d/yy first (Excel format)
+              const formats = ['M/d/yy', 'MM/dd/yyyy', 'yyyy-MM-dd', 'dd/MM/yyyy', 'M/d/yyyy'];
+              for (const fmt of formats) {
+                const parsed = parse(v, fmt, new Date());
+                if (isValid(parsed)) {
+                  // For 2-digit years, date-fns interprets 00-49 as 2000s, 50-99 as 1900s
+                  return parsed.toISOString().split('T')[0];
+                }
+              }
+              return v; // Return as-is if no format matched
+            };
+
+            // Helper: normalize relationship
+            const normalizeRelationship = (val: string, isHead: boolean): string => {
+              const v = clean(val);
+              if (!v || isHead) return 'Head';
+              const map: Record<string, string> = {
+                'wife': 'Wife', 'husband': 'Husband', 'son': 'Son', 'daughter': 'Daughter',
+                'father': 'Father', 'mother': 'Mother', 'brother': 'Brother', 'sister': 'Sister',
+                'grandson': 'Grandson', 'granddaughter': 'Granddaughter',
+                'grandfather': 'Grandfather', 'grandmother': 'Grandmother', 'other': 'Other',
+              };
+              return map[v.toLowerCase()] || v.charAt(0).toUpperCase() + v.slice(1);
+            };
+
             // Remap rows using the user's column mapping
             const mappedRows = importFileRows.map(row => {
               const mapped: Record<string, string> = {};
@@ -937,57 +973,121 @@ const Members: React.FC = () => {
             });
 
             const required = ['name', 'dob', 'gender', 'phone'];
-            const validRows = mappedRows.filter(r => required.every(k => (r[k] ?? '').length > 0));
+            const validRows = mappedRows.filter(r => {
+              const name = clean(r.name);
+              const gender = clean(r.gender);
+              // DOB and phone can be N/A for some members, but name and gender are essential
+              return name.length > 0 && gender.length > 0;
+            });
 
             if (validRows.length === 0) {
-              toast.error('No valid rows found after mapping (need name, dob, gender, phone)');
+              toast.error('No valid rows found after mapping (need at least name and gender)');
               return;
             }
 
+            const existingMemberIds = new Set(members.map(m => m.memberId));
             const existingNumbers = members
               .map(m => m.memberId?.match(/IAG(\d+)/))
               .map(match => (match ? parseInt(match[1], 10) : 0))
               .filter(n => !isNaN(n));
             let nextNumber = (existingNumbers.length ? Math.max(...existingNumbers) : 0) + 1;
 
+            let skippedDuplicates = 0;
+
             const results = await Promise.allSettled(
               validRows.map(async (r) => {
-                const memberId = (r.memberId ?? '').trim() || `IAG${String(nextNumber++).padStart(5, '0')}`;
-                const familyId = (r.familyId ?? '').trim() || memberId.split('-')[0];
-                const isHeadOfFamily = (r.isHeadOfFamily ?? '').trim().toLowerCase() === 'true' || !memberId.includes('-');
-                const relationship = ((r.relationship ?? 'Head').trim() || 'Head') as any;
+                const rawMemberId = clean(r.memberId);
+                const memberId = rawMemberId || `IAG${String(nextNumber++).padStart(5, '0')}`;
+                
+                // Skip duplicates
+                if (existingMemberIds.has(memberId)) {
+                  skippedDuplicates++;
+                  throw new Error(`Duplicate: ${memberId}`);
+                }
+                existingMemberIds.add(memberId);
+
+                const familyId = clean(r.familyId) || memberId.split('-')[0];
+                
+                // Determine if head: from Member_Type column or by ID structure
+                const memberTypeVal = clean(r.isHeadOfFamily).toLowerCase();
+                const isHeadOfFamily = memberTypeVal === 'head' || memberTypeVal === 'true' || !memberId.includes('-');
+                
+                const relationship = normalizeRelationship(r.relationship, isHeadOfFamily);
+                
+                // Gender: trust the Gender column
+                const genderRaw = clean(r.gender).toLowerCase();
+                const gender: 'male' | 'female' = genderRaw === 'female' || genderRaw === 'f' ? 'female' : 'male';
+                
+                // DOB
+                const dob = parseExcelDate(r.dob);
+                
+                // Phone: clean N/A
+                const phone = clean(r.phone);
+                
+                // Anniversary / Married: if valid date → married, extract date
+                const anniversaryRaw = parseExcelDate(r.anniversaryDate);
+                const hasAnniversary = anniversaryRaw.length > 0;
+                
+                // Marital status: derive from married column or fellowship
+                const fellowshipRaw = clean(r.fellowship).toLowerCase();
+                let maritalStatus: 'single' | 'married' | 'widowed' | 'divorced' = 'single';
+                if (hasAnniversary) {
+                  maritalStatus = 'married';
+                } else if (fellowshipRaw === 'womens' || fellowshipRaw === 'mens') {
+                  maritalStatus = 'married';
+                } else if (clean(r.maritalStatus)) {
+                  const ms = clean(r.maritalStatus).toLowerCase();
+                  if (ms === 'married') maritalStatus = 'married';
+                  else if (ms === 'widowed') maritalStatus = 'widowed';
+                  else if (ms === 'divorced') maritalStatus = 'divorced';
+                }
+                
+                // Baptism: if Baptism/Communion column has a valid date → baptized
+                const baptismDateRaw = parseExcelDate(r.baptismDate);
+                const baptismStatus: 'baptized' | 'not_baptized' = baptismDateRaw ? 'baptized' : 'not_baptized';
+                
+                // Team: keep full zonal value as-is
+                const teamRaw = clean(r.team);
+                const team = teamRaw || 'Unassigned';
+                
+                // Status / Category
+                const categoryRaw = clean(r.status).toLowerCase();
+                let status: 'regular' | 'long_absent' | 'occasional_visitor' = 'regular';
+                if (categoryRaw === 'occasional_visitor') status = 'occasional_visitor';
+                else if (categoryRaw === 'out_station' || categoryRaw === 'dnd' || categoryRaw === 'long_absent') status = 'long_absent';
+                
+                // Tamil fields
+                const tamilName = clean(r.tamilName) || undefined;
+                const tamilAddressRaw = clean(r.tamilAddress) || undefined;
 
                 const member: Member = {
                   id: crypto.randomUUID(),
                   memberId,
                   name: r.name ?? '',
-                  dob: r.dob ?? '',
-                  gender: ((r.gender ?? '').toLowerCase() === 'female' ? 'female' : 'male') as any,
-                  phone: r.phone ?? '',
+                  tamilName,
+                  dob,
+                  gender,
+                  phone,
                   address: {
-                    place: r.place ?? '',
-                    city: r.city ?? '',
-                    district: r.district ?? '',
-                    state: r.state ?? '',
-                    country: r.country || 'India',
-                    pincode: r.pincode ?? '',
+                    place: clean(r.place),
+                    city: clean(r.city),
+                    district: clean(r.district),
+                    state: clean(r.state),
+                    country: clean(r.country) || 'India',
+                    pincode: clean(r.pincode),
                   },
+                  tamilAddress: tamilAddressRaw ? { place: tamilAddressRaw } : undefined,
                   familyId,
                   isHeadOfFamily,
-                  relationship,
-                  maritalStatus: ((r.maritalStatus || 'single') as any),
-                  anniversaryDate: r.anniversaryDate || undefined,
-                  baptismStatus: ((r.baptismStatus || 'not_baptized') as any),
-                  baptismDate: r.baptismDate || undefined,
-                  churchRole: ((r.churchRole || 'attendee') as any),
-                  team: (() => {
-                    const raw = (r.team ?? '').trim();
-                    if (!raw) return 'Unassigned';
-                    if (raw.toLowerCase() === 'zone') return 'Team';
-                    return raw.charAt(0).toUpperCase() + raw.slice(1);
-                  })(),
-                  status: ((r.status || 'regular') as any),
-                  remarks: r.remarks || undefined,
+                  relationship: relationship as any,
+                  maritalStatus,
+                  anniversaryDate: hasAnniversary ? anniversaryRaw : undefined,
+                  baptismStatus,
+                  baptismDate: baptismDateRaw || undefined,
+                  churchRole: 'attendee',
+                  team,
+                  status,
+                  remarks: clean(r.remarks) || undefined,
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 };
@@ -998,16 +1098,21 @@ const Members: React.FC = () => {
 
             const succeeded = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<Member>[];
             const failed = results.filter(r => r.status === 'rejected') as PromiseRejectedResult[];
+            const actualFailures = failed.length - skippedDuplicates;
 
             if (succeeded.length) {
               setMembers(prev => [...prev, ...succeeded.map(s => s.value)]);
             }
 
-            if (failed.length) {
+            let msg = `Imported ${succeeded.length} members`;
+            if (skippedDuplicates > 0) msg += `, ${skippedDuplicates} duplicates skipped`;
+            if (actualFailures > 0) msg += `, ${actualFailures} failed`;
+            
+            if (actualFailures > 0) {
               console.error('Import failures:', failed.map(f => f.reason));
-              toast.error(`Imported ${succeeded.length} members, ${failed.length} failed`);
+              toast.error(msg);
             } else {
-              toast.success(`Successfully imported ${succeeded.length} members`);
+              toast.success(msg);
             }
           } catch (error) {
             console.error('Import error:', error);

@@ -9,7 +9,7 @@ export interface User {
 
 export type MemberStatus = 'regular' | 'long_absent' | 'occasional_visitor';
 
-export type RelationshipType = 'Head' | 'Wife' | 'Husband' | 'Son' | 'Daughter' | 'Father' | 'Mother' | 'Brother' | 'Sister' | 'Other';
+export type RelationshipType = 'Head' | 'Wife' | 'Husband' | 'Son' | 'Daughter' | 'Father' | 'Mother' | 'Brother' | 'Sister' | 'Grandson' | 'Granddaughter' | 'Grandfather' | 'Grandmother' | 'Other';
 
 export interface Member {
   id: string;

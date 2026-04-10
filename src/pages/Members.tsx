@@ -1035,11 +1035,19 @@ const Members: React.FC = () => {
                 const memberTypeVal = clean(r.isHeadOfFamily).toLowerCase();
                 const isHeadOfFamily = memberTypeVal === 'head' || memberTypeVal === 'true' || !memberId.includes('-');
                 
-                const relationship = normalizeRelationship(r.relationship, isHeadOfFamily);
-                
-                // Gender: trust the Gender column
+                // Gender: trust the Gender column, but fix if Title contradicts
                 const genderRaw = clean(r.gender).toLowerCase();
-                const gender: 'male' | 'female' = genderRaw === 'female' || genderRaw === 'f' ? 'female' : 'male';
+                const titleRaw = clean(r.title || '').toLowerCase();
+                let gender: 'male' | 'female';
+                // If gender/title conflict, trust Title (more reliable for names)
+                if ((genderRaw === 'male' && (titleRaw === 'mrs' || titleRaw === 'miss')) ||
+                    (genderRaw === 'female' && titleRaw === 'mr')) {
+                  gender = (titleRaw === 'mr' || titleRaw === 'master') ? 'male' : 'female';
+                } else {
+                  gender = genderRaw === 'female' || genderRaw === 'f' ? 'female' : 'male';
+                }
+                
+                const relationship = normalizeRelationship(r.relationship, isHeadOfFamily, gender);
                 
                 // DOB
                 const dob = parseExcelDate(r.dob);

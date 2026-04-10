@@ -1042,7 +1042,7 @@ const Members: React.FC = () => {
                 // If gender/title conflict, trust Title (more reliable for names)
                 if ((genderRaw === 'male' && (titleRaw === 'mrs' || titleRaw === 'miss')) ||
                     (genderRaw === 'female' && titleRaw === 'mr')) {
-                  gender = (titleRaw === 'mr' || titleRaw === 'master') ? 'male' : 'female';
+                  gender = titleRaw === 'mr' ? 'male' : 'female';
                 } else {
                   gender = genderRaw === 'female' || genderRaw === 'f' ? 'female' : 'male';
                 }

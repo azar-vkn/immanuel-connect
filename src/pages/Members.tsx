@@ -951,9 +951,14 @@ const Members: React.FC = () => {
             };
 
             // Helper: normalize relationship with gender-aware correction
-            const normalizeRelationship = (val: string, isHead: boolean, gender: 'male' | 'female'): string => {
+            const normalizeRelationship = (
+              val: string, isHead: boolean, gender: 'male' | 'female',
+              titleRaw: string, fellowshipRaw: string, marriedVal: string
+            ): string => {
               const v = clean(val);
-              if (!v || isHead) return 'Head';
+              // If head of family, always "Head"
+              if (isHead) return 'Head';
+
               const map: Record<string, string> = {
                 'wife': 'Wife', 'husband': 'Husband', 'son': 'Son', 'daughter': 'Daughter',
                 'father': 'Father', 'mother': 'Mother', 'brother': 'Brother', 'sister': 'Sister',
@@ -962,10 +967,29 @@ const Members: React.FC = () => {
                 'son-in-law': 'Son-In-Law', 'daughter-in-law': 'Daughter-In-Law',
                 'dependent': 'Dependent', 'other': 'Other',
               };
-              let rel = map[v.toLowerCase()] || v.charAt(0).toUpperCase() + v.slice(1);
+
+              let rel = v ? (map[v.toLowerCase()] || v.charAt(0).toUpperCase() + v.slice(1)) : '';
+
+              // If relationship is empty/N/A for non-heads, infer from title/fellowship/gender
+              if (!rel) {
+                const title = titleRaw.toLowerCase();
+                const fellowship = fellowshipRaw.toLowerCase();
+                if (title === 'baby' || title === 'master' || fellowship === 'childrens') {
+                  rel = gender === 'female' ? 'Daughter' : 'Son';
+                } else if (title === 'mrs' && (fellowship === 'womens' || clean(marriedVal))) {
+                  rel = 'Wife';
+                } else if (title === 'mr' && (fellowship === 'mens' || clean(marriedVal))) {
+                  rel = 'Husband';
+                } else if (title === 'miss' || fellowship === 'girls') {
+                  rel = 'Daughter';
+                } else if (fellowship === 'boys') {
+                  rel = 'Son';
+                } else {
+                  rel = gender === 'female' ? 'Wife' : 'Husband';
+                }
+              }
               
               // Fix gender/relationship mismatches
-              // Female with male relationship → correct to female equivalent
               if (gender === 'female') {
                 const femaleCorrections: Record<string, string> = {
                   'Father': 'Mother', 'Husband': 'Wife', 'Son': 'Daughter',
@@ -974,7 +998,6 @@ const Members: React.FC = () => {
                 };
                 if (femaleCorrections[rel]) rel = femaleCorrections[rel];
               }
-              // Male with female relationship → correct to male equivalent
               if (gender === 'male') {
                 const maleCorrections: Record<string, string> = {
                   'Mother': 'Father', 'Wife': 'Husband', 'Daughter': 'Son',

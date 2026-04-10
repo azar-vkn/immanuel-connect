@@ -89,6 +89,7 @@ function autoMatch(fileColumns: string[]): Record<string, string> {
     tamilName: ['tamilname', 'tamil name', 'tamil_name', 'name_tamil'],
     tamilAddress: ['tamiladdress', 'tamil address', 'tamil_address', 'address_tamil'],
     fellowship: ['fellowship'],
+    title: ['title'],
   };
 
   for (const col of fileColumns) {

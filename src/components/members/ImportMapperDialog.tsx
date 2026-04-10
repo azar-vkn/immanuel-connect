@@ -45,6 +45,7 @@ const APP_FIELDS = [
   { key: 'tamilName', label: 'Tamil Name', required: false },
   { key: 'tamilAddress', label: 'Tamil Address', required: false },
   { key: 'fellowship', label: 'Fellowship', required: false },
+  { key: 'title', label: 'Title (Mr/Mrs/Miss)', required: false },
 ] as const;
 
 const SKIP_VALUE = '__skip__';

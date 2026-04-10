@@ -27,7 +27,8 @@ interface MemberFormProps {
 type MemberCategory = 'new_family_head' | 'existing_family_member';
 
 const RELATIONSHIP_OPTIONS: RelationshipType[] = [
-  'Head', 'Wife', 'Husband', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Other'
+  'Head', 'Wife', 'Husband', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister',
+  'Grandson', 'Granddaughter', 'Grandfather', 'Grandmother', 'Son-In-Law', 'Daughter-In-Law', 'Dependent', 'Other'
 ];
 
 // Debounce hook

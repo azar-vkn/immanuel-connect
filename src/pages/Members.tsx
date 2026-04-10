@@ -1070,7 +1070,10 @@ const Members: React.FC = () => {
                   gender = genderRaw === 'female' || genderRaw === 'f' ? 'female' : 'male';
                 }
                 
-                const relationship = normalizeRelationship(r.relationship, isHeadOfFamily, gender);
+                const relationship = normalizeRelationship(
+                  r.relationship, isHeadOfFamily, gender,
+                  clean(r.title || ''), clean(r.fellowship || ''), r.anniversaryDate || ''
+                );
                 
                 // DOB
                 const dob = parseExcelDate(r.dob);

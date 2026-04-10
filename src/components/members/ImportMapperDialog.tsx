@@ -45,6 +45,7 @@ const APP_FIELDS = [
   { key: 'tamilName', label: 'Tamil Name', required: false },
   { key: 'tamilAddress', label: 'Tamil Address', required: false },
   { key: 'fellowship', label: 'Fellowship', required: false },
+  { key: 'title', label: 'Title (Mr/Mrs/Miss)', required: false },
 ] as const;
 
 const SKIP_VALUE = '__skip__';
@@ -88,6 +89,7 @@ function autoMatch(fileColumns: string[]): Record<string, string> {
     tamilName: ['tamilname', 'tamil name', 'tamil_name', 'name_tamil'],
     tamilAddress: ['tamiladdress', 'tamil address', 'tamil_address', 'address_tamil'],
     fellowship: ['fellowship'],
+    title: ['title'],
   };
 
   for (const col of fileColumns) {

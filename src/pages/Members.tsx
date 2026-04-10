@@ -950,17 +950,40 @@ const Members: React.FC = () => {
               return v; // Return as-is if no format matched
             };
 
-            // Helper: normalize relationship
-            const normalizeRelationship = (val: string, isHead: boolean): string => {
+            // Helper: normalize relationship with gender-aware correction
+            const normalizeRelationship = (val: string, isHead: boolean, gender: 'male' | 'female'): string => {
               const v = clean(val);
               if (!v || isHead) return 'Head';
               const map: Record<string, string> = {
                 'wife': 'Wife', 'husband': 'Husband', 'son': 'Son', 'daughter': 'Daughter',
                 'father': 'Father', 'mother': 'Mother', 'brother': 'Brother', 'sister': 'Sister',
                 'grandson': 'Grandson', 'granddaughter': 'Granddaughter',
-                'grandfather': 'Grandfather', 'grandmother': 'Grandmother', 'other': 'Other',
+                'grandfather': 'Grandfather', 'grandmother': 'Grandmother',
+                'son-in-law': 'Son-In-Law', 'daughter-in-law': 'Daughter-In-Law',
+                'dependent': 'Dependent', 'other': 'Other',
               };
-              return map[v.toLowerCase()] || v.charAt(0).toUpperCase() + v.slice(1);
+              let rel = map[v.toLowerCase()] || v.charAt(0).toUpperCase() + v.slice(1);
+              
+              // Fix gender/relationship mismatches
+              // Female with male relationship → correct to female equivalent
+              if (gender === 'female') {
+                const femaleCorrections: Record<string, string> = {
+                  'Father': 'Mother', 'Husband': 'Wife', 'Son': 'Daughter',
+                  'Brother': 'Sister', 'Grandson': 'Granddaughter', 'Grandfather': 'Grandmother',
+                  'Son-In-Law': 'Daughter-In-Law',
+                };
+                if (femaleCorrections[rel]) rel = femaleCorrections[rel];
+              }
+              // Male with female relationship → correct to male equivalent
+              if (gender === 'male') {
+                const maleCorrections: Record<string, string> = {
+                  'Mother': 'Father', 'Wife': 'Husband', 'Daughter': 'Son',
+                  'Sister': 'Brother', 'Granddaughter': 'Grandson', 'Grandmother': 'Grandfather',
+                  'Daughter-In-Law': 'Son-In-Law',
+                };
+                if (maleCorrections[rel]) rel = maleCorrections[rel];
+              }
+              return rel;
             };
 
             // Remap rows using the user's column mapping
@@ -1012,11 +1035,19 @@ const Members: React.FC = () => {
                 const memberTypeVal = clean(r.isHeadOfFamily).toLowerCase();
                 const isHeadOfFamily = memberTypeVal === 'head' || memberTypeVal === 'true' || !memberId.includes('-');
                 
-                const relationship = normalizeRelationship(r.relationship, isHeadOfFamily);
-                
-                // Gender: trust the Gender column
+                // Gender: trust the Gender column, but fix if Title contradicts
                 const genderRaw = clean(r.gender).toLowerCase();
-                const gender: 'male' | 'female' = genderRaw === 'female' || genderRaw === 'f' ? 'female' : 'male';
+                const titleRaw = clean(r.title || '').toLowerCase();
+                let gender: 'male' | 'female';
+                // If gender/title conflict, trust Title (more reliable for names)
+                if ((genderRaw === 'male' && (titleRaw === 'mrs' || titleRaw === 'miss')) ||
+                    (genderRaw === 'female' && titleRaw === 'mr')) {
+                  gender = titleRaw === 'mr' ? 'male' : 'female';
+                } else {
+                  gender = genderRaw === 'female' || genderRaw === 'f' ? 'female' : 'male';
+                }
+                
+                const relationship = normalizeRelationship(r.relationship, isHeadOfFamily, gender);
                 
                 // DOB
                 const dob = parseExcelDate(r.dob);

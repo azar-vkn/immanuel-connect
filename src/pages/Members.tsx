@@ -50,7 +50,8 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  Users
+  Users,
+  Wrench
 } from 'lucide-react';
 import { MemberForm } from '@/components/members/MemberForm';
 import { MemberIDCard } from '@/components/members/MemberIDCard';

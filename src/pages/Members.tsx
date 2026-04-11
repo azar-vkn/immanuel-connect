@@ -347,91 +347,168 @@ const Members: React.FC = () => {
     }
   };
 
-  // Batch fix all existing members: relationship, gender, memberType, maritalStatus
-  const handleFixAllMembers = async () => {
-    if (!confirm('This will fix relationship, gender, and marital status for all members. Continue?')) return;
-    
-    let fixCount = 0;
-    const updates: Promise<void>[] = [];
+  // Delete all existing members and re-import from cleaned CSV
+  const handleReplaceAllMembers = async () => {
+    if (!confirm('⚠️ This will DELETE all existing members and re-import 789 corrected members from the cleaned data. This cannot be undone. Continue?')) return;
 
-    for (const m of members) {
-      const fixes: Partial<Member> = {};
-      let needsUpdate = false;
-
-      // Fix 1: Female heads should have relationship "Head", not "Father"
-      if (m.isHeadOfFamily && m.relationship !== 'Head') {
-        fixes.relationship = 'Head';
-        needsUpdate = true;
-      }
-
-      // Fix 2: Gender-relationship mismatch for non-heads
-      if (!m.isHeadOfFamily) {
-        const femaleCorrections: Record<string, string> = {
-          'Father': 'Mother', 'Husband': 'Wife', 'Son': 'Daughter',
-          'Brother': 'Sister', 'Grandson': 'Granddaughter', 'Grandfather': 'Grandmother',
-          'Son-In-Law': 'Daughter-In-Law',
-        };
-        const maleCorrections: Record<string, string> = {
-          'Mother': 'Father', 'Wife': 'Husband', 'Daughter': 'Son',
-          'Sister': 'Brother', 'Granddaughter': 'Grandson', 'Grandmother': 'Grandfather',
-          'Daughter-In-Law': 'Son-In-Law',
-        };
-
-        if (m.gender === 'female' && femaleCorrections[m.relationship]) {
-          fixes.relationship = femaleCorrections[m.relationship] as Member['relationship'];
-          needsUpdate = true;
-        }
-        if (m.gender === 'male' && maleCorrections[m.relationship]) {
-          fixes.relationship = maleCorrections[m.relationship] as Member['relationship'];
-          needsUpdate = true;
-        }
-
-        // Fix N/A relationship for non-heads
-        if (!m.relationship || (m.relationship as string) === 'N/A') {
-          fixes.relationship = m.gender === 'female' ? 'Daughter' : 'Son';
-          needsUpdate = true;
-        }
-      }
-
-      // Fix 3: maritalStatus - if it's empty or N/A, derive
-      const msRaw = (m.maritalStatus as string) || '';
-      if (!msRaw || msRaw.toLowerCase() === 'n/a') {
-        if (m.anniversaryDate) {
-          fixes.maritalStatus = 'married';
-        } else if ((fixes.relationship || m.relationship) === 'Wife' || (fixes.relationship || m.relationship) === 'Husband') {
-          fixes.maritalStatus = 'married';
-        } else {
-          fixes.maritalStatus = 'single';
-        }
-        needsUpdate = true;
-      }
-
-      // Fix 4: memberType legacy field
-      if (!m.memberType) {
-        fixes.memberType = m.isHeadOfFamily ? 'individual' : 'family';
-        needsUpdate = true;
-      }
-
-      if (needsUpdate) {
-        fixCount++;
-        updates.push(updateMember(m.id, fixes));
-      }
-    }
-
-    if (updates.length === 0) {
-      toast.info('All members are already correct!');
-      return;
-    }
-
+    setLoading(true);
     try {
-      await Promise.allSettled(updates);
-      // Reload members
+      // Step 1: Delete all existing members
+      toast.info('Deleting existing members...');
+      const deletePromises = members.map(m => deleteMember(m.id));
+      await Promise.allSettled(deletePromises);
+      toast.info(`Deleted ${members.length} members. Now importing cleaned data...`);
+
+      // Step 2: Fetch cleaned CSV
+      const response = await fetch('/members_final_cleaned.csv');
+      const csvText = await response.text();
+      const rows = parseCsv(csvText);
+
+      // Step 3: Transform and create members
+      let created = 0;
+      let errors = 0;
+      const batchSize = 20;
+
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        const promises = batch.map(async (row) => {
+          try {
+            const isHead = row['isHeadOfFamily']?.trim() === 'True';
+            const genderRaw = (row['gender'] || '').trim().toLowerCase();
+            const gender: 'male' | 'female' = genderRaw === 'male' ? 'male' : 'female';
+
+            // Fix relationship
+            let relationship = (row['relationship'] || '').trim();
+            if (isHead) {
+              relationship = 'Head';
+            } else if (!relationship || relationship === 'Father' || relationship === 'N/A') {
+              // Fix Father for non-heads and empty relationships
+              if (relationship === 'Father') {
+                relationship = gender === 'female' ? 'Mother' : 'Father';
+              } else {
+                // Infer from gender
+                relationship = gender === 'female' ? 'Daughter' : 'Son';
+              }
+            }
+            // Gender-relationship mismatch corrections
+            const femaleCorrections: Record<string, string> = {
+              'Husband': 'Wife', 'Son': 'Daughter', 'Brother': 'Sister',
+              'Grandson': 'Granddaughter', 'Grandfather': 'Grandmother', 'Son-In-Law': 'Daughter-In-Law',
+            };
+            const maleCorrections: Record<string, string> = {
+              'Wife': 'Husband', 'Daughter': 'Son', 'Sister': 'Brother', 'Mother': 'Father',
+              'Granddaughter': 'Grandson', 'Grandmother': 'Grandfather', 'Daughter-In-Law': 'Son-In-Law',
+            };
+            if (!isHead && gender === 'female' && femaleCorrections[relationship]) {
+              relationship = femaleCorrections[relationship];
+            }
+            if (!isHead && gender === 'male' && maleCorrections[relationship]) {
+              relationship = maleCorrections[relationship];
+            }
+
+            // Fix DOB
+            let dob = (row['dob'] || '').trim();
+            if (dob === '0000-00-00' || dob === '0001-01-01' || dob === 'NaT') dob = '';
+
+            // Fix phone - remove .0
+            let phone = (row['phone'] || '').trim();
+            phone = phone.replace(/\.0$/, '');
+            if (phone === 'N/A' || phone === 'NaT') phone = '';
+
+            // Fix maritalStatus
+            let maritalStatus: 'single' | 'married' | 'widowed' | 'divorced' = 'single';
+            const msRaw = (row['maritalStatus'] || '').trim();
+            if (msRaw === 'Married') {
+              maritalStatus = 'married';
+            } else if (relationship === 'Wife' || relationship === 'Husband') {
+              maritalStatus = 'married';
+            }
+
+            // Fix anniversaryDate
+            let anniversaryDate: string | undefined;
+            const marriageDateRaw = (row['marriageDate'] || '').trim();
+            if (marriageDateRaw && marriageDateRaw !== 'NaT' && marriageDateRaw !== 'N/A') {
+              anniversaryDate = marriageDateRaw;
+              maritalStatus = 'married';
+            }
+
+            // Fix baptismStatus
+            let baptismStatus: 'baptized' | 'not_baptized' = 'not_baptized';
+            let baptismDate: string | undefined;
+            const baptRaw = (row['baptismStatus'] || '').trim();
+            const baptDateRaw = (row['baptismDate'] || '').trim();
+            if (baptRaw === 'Yes' || (baptDateRaw && baptDateRaw !== 'NaT' && baptDateRaw !== 'N/A')) {
+              baptismStatus = 'baptized';
+              if (baptDateRaw && baptDateRaw !== 'NaT') baptismDate = baptDateRaw;
+            }
+
+            // Fix status from remarks
+            const remarksRaw = (row['remarks'] || '').trim().toLowerCase();
+            let status: 'regular' | 'long_absent' | 'occasional_visitor' = 'regular';
+            if (remarksRaw === 'out_station' || remarksRaw === 'dnd' || remarksRaw === 'long_absent' || remarksRaw === 'left') {
+              status = 'long_absent';
+            } else if (remarksRaw === 'occasional_visitor') {
+              status = 'occasional_visitor';
+            }
+
+            // Fix pincode
+            let pincode = (row['pincode'] || '').trim();
+            pincode = pincode.replace(/\.0$/, '');
+            if (pincode === 'N/A' || pincode === 'NaT' || !pincode) pincode = '';
+
+            const memberData: Omit<Member, 'id'> = {
+              memberId: (row['memberId'] || '').trim(),
+              name: (row['name'] || '').trim(),
+              dob,
+              gender,
+              phone,
+              address: {
+                place: (row['place'] || '').trim(),
+                city: (row['city'] || '').trim(),
+                district: '',
+                state: (row['state'] || 'Tamil Nadu').trim(),
+                country: (row['country'] || 'India').trim(),
+                pincode,
+              },
+              familyId: (row['familyId'] || '').trim(),
+              isHeadOfFamily: isHead,
+              relationship: relationship as Member['relationship'],
+              maritalStatus,
+              anniversaryDate,
+              baptismStatus,
+              baptismDate,
+              churchRole: ((row['churchRole'] || 'attendee').trim() as Member['churchRole']),
+              team: (row['team'] || '').trim(),
+              status,
+              memberType: isHead ? 'individual' : 'family',
+              remarks: remarksRaw || undefined,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            await createMember(memberData);
+            created++;
+          } catch (err) {
+            errors++;
+            console.error('Error creating member:', row['memberId'], err);
+          }
+        });
+        await Promise.allSettled(promises);
+        // Progress update every batch
+        if (i % 100 === 0) {
+          toast.info(`Progress: ${Math.min(i + batchSize, rows.length)}/${rows.length}`);
+        }
+      }
+
+      // Reload
       const data = await getMembers();
       setMembers(data);
-      toast.success(`Fixed ${fixCount} members successfully`);
+      toast.success(`Import complete! Created ${created} members. ${errors > 0 ? `${errors} errors.` : ''}`);
     } catch (error) {
-      console.error('Fix error:', error);
-      toast.error(`Fix failed: ${getErrorMessage(error)}`);
+      console.error('Replace error:', error);
+      toast.error(`Replace failed: ${getErrorMessage(error)}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -510,10 +587,10 @@ const Members: React.FC = () => {
                 variant="outline"
                 size="sm"
                 className="gap-2"
-                onClick={handleFixAllMembers}
+                onClick={handleReplaceAllMembers}
               >
                 <Wrench className="w-4 h-4" />
-                Fix All Data
+                Replace All Data
               </Button>
               <Button
                 size="sm"

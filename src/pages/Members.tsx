@@ -387,7 +387,7 @@ const Members: React.FC = () => {
         }
 
         // Fix N/A relationship for non-heads
-        if (!m.relationship || m.relationship === 'N/A') {
+        if (!m.relationship || (m.relationship as string) === 'N/A') {
           fixes.relationship = m.gender === 'female' ? 'Daughter' : 'Son';
           needsUpdate = true;
         }

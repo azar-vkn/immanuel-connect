@@ -394,10 +394,11 @@ const Members: React.FC = () => {
       }
 
       // Fix 3: maritalStatus - if it's empty or N/A, derive
-      if (!m.maritalStatus || m.maritalStatus === ('N/A' as any)) {
+      const msRaw = (m.maritalStatus as string) || '';
+      if (!msRaw || msRaw.toLowerCase() === 'n/a') {
         if (m.anniversaryDate) {
           fixes.maritalStatus = 'married';
-        } else if (m.relationship === 'Wife' || m.relationship === 'Husband') {
+        } else if ((fixes.relationship || m.relationship) === 'Wife' || (fixes.relationship || m.relationship) === 'Husband') {
           fixes.maritalStatus = 'married';
         } else {
           fixes.maritalStatus = 'single';

@@ -509,6 +509,14 @@ const Members: React.FC = () => {
                 variant="outline"
                 size="sm"
                 className="gap-2"
+                onClick={handleFixAllMembers}
+              >
+                <Wrench className="w-4 h-4" />
+                Fix All Data
+              </Button>
+                variant="outline"
+                size="sm"
+                className="gap-2"
                 onClick={() => {
                   const headers = [
                     'memberId','name','dob','gender','phone',

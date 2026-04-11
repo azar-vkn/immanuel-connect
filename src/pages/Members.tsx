@@ -587,10 +587,10 @@ const Members: React.FC = () => {
                 variant="outline"
                 size="sm"
                 className="gap-2"
-                onClick={handleFixAllMembers}
+                onClick={handleReplaceAllMembers}
               >
                 <Wrench className="w-4 h-4" />
-                Fix All Data
+                Replace All Data
               </Button>
               <Button
                 size="sm"

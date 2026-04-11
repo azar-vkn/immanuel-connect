@@ -514,7 +514,7 @@ const Members: React.FC = () => {
                 <Wrench className="w-4 h-4" />
                 Fix All Data
               </Button>
-                variant="outline"
+              <Button
                 size="sm"
                 className="gap-2"
                 onClick={() => {

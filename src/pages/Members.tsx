@@ -50,7 +50,8 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  Users
+  Users,
+  Wrench
 } from 'lucide-react';
 import { MemberForm } from '@/components/members/MemberForm';
 import { MemberIDCard } from '@/components/members/MemberIDCard';
@@ -345,6 +346,95 @@ const Members: React.FC = () => {
       toast.error(`Failed to add member: ${getErrorMessage(error)}`);
     }
   };
+
+  // Batch fix all existing members: relationship, gender, memberType, maritalStatus
+  const handleFixAllMembers = async () => {
+    if (!confirm('This will fix relationship, gender, and marital status for all members. Continue?')) return;
+    
+    let fixCount = 0;
+    const updates: Promise<void>[] = [];
+
+    for (const m of members) {
+      const fixes: Partial<Member> = {};
+      let needsUpdate = false;
+
+      // Fix 1: Female heads should have relationship "Head", not "Father"
+      if (m.isHeadOfFamily && m.relationship !== 'Head') {
+        fixes.relationship = 'Head';
+        needsUpdate = true;
+      }
+
+      // Fix 2: Gender-relationship mismatch for non-heads
+      if (!m.isHeadOfFamily) {
+        const femaleCorrections: Record<string, string> = {
+          'Father': 'Mother', 'Husband': 'Wife', 'Son': 'Daughter',
+          'Brother': 'Sister', 'Grandson': 'Granddaughter', 'Grandfather': 'Grandmother',
+          'Son-In-Law': 'Daughter-In-Law',
+        };
+        const maleCorrections: Record<string, string> = {
+          'Mother': 'Father', 'Wife': 'Husband', 'Daughter': 'Son',
+          'Sister': 'Brother', 'Granddaughter': 'Grandson', 'Grandmother': 'Grandfather',
+          'Daughter-In-Law': 'Son-In-Law',
+        };
+
+        if (m.gender === 'female' && femaleCorrections[m.relationship]) {
+          fixes.relationship = femaleCorrections[m.relationship] as Member['relationship'];
+          needsUpdate = true;
+        }
+        if (m.gender === 'male' && maleCorrections[m.relationship]) {
+          fixes.relationship = maleCorrections[m.relationship] as Member['relationship'];
+          needsUpdate = true;
+        }
+
+        // Fix N/A relationship for non-heads
+        if (!m.relationship || (m.relationship as string) === 'N/A') {
+          fixes.relationship = m.gender === 'female' ? 'Daughter' : 'Son';
+          needsUpdate = true;
+        }
+      }
+
+      // Fix 3: maritalStatus - if it's empty or N/A, derive
+      const msRaw = (m.maritalStatus as string) || '';
+      if (!msRaw || msRaw.toLowerCase() === 'n/a') {
+        if (m.anniversaryDate) {
+          fixes.maritalStatus = 'married';
+        } else if ((fixes.relationship || m.relationship) === 'Wife' || (fixes.relationship || m.relationship) === 'Husband') {
+          fixes.maritalStatus = 'married';
+        } else {
+          fixes.maritalStatus = 'single';
+        }
+        needsUpdate = true;
+      }
+
+      // Fix 4: memberType legacy field
+      if (!m.memberType) {
+        fixes.memberType = m.isHeadOfFamily ? 'individual' : 'family';
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        fixCount++;
+        updates.push(updateMember(m.id, fixes));
+      }
+    }
+
+    if (updates.length === 0) {
+      toast.info('All members are already correct!');
+      return;
+    }
+
+    try {
+      await Promise.allSettled(updates);
+      // Reload members
+      const data = await getMembers();
+      setMembers(data);
+      toast.success(`Fixed ${fixCount} members successfully`);
+    } catch (error) {
+      console.error('Fix error:', error);
+      toast.error(`Fix failed: ${getErrorMessage(error)}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -418,6 +508,14 @@ const Members: React.FC = () => {
 
               <Button
                 variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleFixAllMembers}
+              >
+                <Wrench className="w-4 h-4" />
+                Fix All Data
+              </Button>
+              <Button
                 size="sm"
                 className="gap-2"
                 onClick={() => {

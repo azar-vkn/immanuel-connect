@@ -96,7 +96,11 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
               </div>
               <div>
                 <span className="text-muted-foreground">Marital Status</span>
-                <p className="font-medium capitalize">{member.maritalStatus}</p>
+                <p className="font-medium capitalize">{member.maritalStatus || 'N/A'}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Relationship</span>
+                <p className="font-medium capitalize">{member.relationship || 'N/A'}</p>
               </div>
               {member.maritalStatus === 'married' && member.anniversaryDate && (
                 <div>
@@ -188,7 +192,7 @@ export const MemberViewDialog: React.FC<MemberViewDialogProps> = ({
               )}
               <div>
                 <span className="text-muted-foreground">Member Type</span>
-                <p className="font-medium capitalize">{member.memberType}</p>
+                <p className="font-medium capitalize">{member.isHeadOfFamily ? 'Head' : 'Member'}</p>
               </div>
             </div>
           </div>

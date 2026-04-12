@@ -27,6 +27,7 @@ const Attendance: React.FC = () => {
   const [searchName, setSearchName] = useState('');
   const [searchId, setSearchId] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
+  const [markingFamilyId, setMarkingFamilyId] = useState<string | null>(null);
 
   const canMark = hasPermission('attendance.mark');
 

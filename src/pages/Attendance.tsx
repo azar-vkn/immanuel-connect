@@ -276,9 +276,14 @@ const Attendance: React.FC = () => {
                               size="sm"
                               variant="outline"
                               onClick={() => handleMarkFullFamily(member)}
+                              disabled={markingFamilyId === member.familyId}
                               className="border-primary/50 text-primary hover:bg-primary/10"
                             >
-                              <Users className="w-4 h-4 mr-1" />
+                              {markingFamilyId === member.familyId ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              ) : (
+                                <Users className="w-4 h-4 mr-1" />
+                              )}
                               Full Family ({familyMembers.length})
                             </Button>
                           )}

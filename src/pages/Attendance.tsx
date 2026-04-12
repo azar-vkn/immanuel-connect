@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, UserCheck, UserX, CheckCircle2, X, Loader2 } from 'lucide-react';
+import { Search, UserCheck, CheckCircle2, X, Loader2, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -30,7 +30,6 @@ const Attendance: React.FC = () => {
 
   const canMark = hasPermission('attendance.mark');
 
-  // Fetch data from Firestore
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -64,10 +63,8 @@ const Attendance: React.FC = () => {
 
   const searchResults = useMemo(() => {
     if (!selectedEventId) return [];
-    
     const query = searchName.toLowerCase() || searchId.toLowerCase() || searchPhone;
     if (!query) return [];
-
     return members.filter(m => {
       if (searchName && m.name.toLowerCase().includes(searchName.toLowerCase())) return true;
       if (searchId && m.memberId.toLowerCase().includes(searchId.toLowerCase())) return true;
@@ -76,12 +73,17 @@ const Attendance: React.FC = () => {
     }).slice(0, 10);
   }, [selectedEventId, searchName, searchId, searchPhone, members]);
 
+  // Get family members for a given member
+  const getFamilyMembers = (member: Member): Member[] => {
+    if (!member.familyId) return [];
+    return members.filter(m => m.familyId === member.familyId);
+  };
+
   const handleMarkAttendance = async (member: Member) => {
     if (markedMemberIds.has(member.id)) {
       toast.info(`${member.name} is already marked present`);
       return;
     }
-
     try {
       const newAttendanceData = {
         eventId: selectedEventId,
@@ -89,9 +91,8 @@ const Attendance: React.FC = () => {
         markedAt: new Date().toISOString(),
         markedBy: user?.id || 'unknown'
       };
-
       const id = await markAttendance(newAttendanceData);
-      setAttendance([...attendance, { id, ...newAttendanceData }]);
+      setAttendance(prev => [...prev, { id, ...newAttendanceData }]);
       toast.success(`Marked ${member.name} as present`);
     } catch (error) {
       console.error('Error marking attendance:', error);
@@ -99,12 +100,37 @@ const Attendance: React.FC = () => {
     }
   };
 
+  const handleMarkFullFamily = async (member: Member) => {
+    const familyMembers = getFamilyMembers(member);
+    const unmarked = familyMembers.filter(m => !markedMemberIds.has(m.id));
+    if (unmarked.length === 0) {
+      toast.info('All family members are already marked present');
+      return;
+    }
+    try {
+      const newRecords: AttendanceType[] = [];
+      for (const fm of unmarked) {
+        const data = {
+          eventId: selectedEventId,
+          memberId: fm.id,
+          markedAt: new Date().toISOString(),
+          markedBy: user?.id || 'unknown'
+        };
+        const id = await markAttendance(data);
+        newRecords.push({ id, ...data });
+      }
+      setAttendance(prev => [...prev, ...newRecords]);
+      toast.success(`Marked ${unmarked.length} family member(s) as present`);
+    } catch (error) {
+      console.error('Error marking family attendance:', error);
+      toast.error('Failed to mark family attendance');
+    }
+  };
+
   const handleRemoveAttendance = async (memberId: string) => {
     const member = members.find(m => m.id === memberId);
     const attendanceRecord = attendance.find(a => a.eventId === selectedEventId && a.memberId === memberId);
-    
     if (!attendanceRecord) return;
-
     try {
       await deleteAttendance(attendanceRecord.id);
       setAttendance(attendance.filter(a => !(a.eventId === selectedEventId && a.memberId === memberId)));
@@ -117,6 +143,11 @@ const Attendance: React.FC = () => {
 
   const presentMembers = members.filter(m => markedMemberIds.has(m.id));
 
+  const formatAddress = (member: Member) => {
+    const parts = [member.address?.place, member.address?.city, member.address?.district].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : '';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -127,13 +158,11 @@ const Attendance: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="animate-fade-in">
         <h1 className="font-serif text-3xl font-bold text-gold-gradient">Attendance</h1>
         <p className="text-muted-foreground">Mark and manage event attendance</p>
       </div>
 
-      {/* Event Selection */}
       <div className="glass rounded-xl p-6 animate-fade-in [animation-delay:100ms]">
         <Label className="text-base font-medium mb-3 block">Select Event</Label>
         <Select value={selectedEventId} onValueChange={setSelectedEventId}>
@@ -152,7 +181,6 @@ const Attendance: React.FC = () => {
 
       {selectedEventId && (
         <>
-          {/* Search Section */}
           {canMark && (
             <div className="glass rounded-xl p-6 animate-fade-in [animation-delay:200ms]">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -169,11 +197,7 @@ const Attendance: React.FC = () => {
                       id="searchName"
                       placeholder="Enter name..."
                       value={searchName}
-                      onChange={(e) => {
-                        setSearchName(e.target.value);
-                        setSearchId('');
-                        setSearchPhone('');
-                      }}
+                      onChange={(e) => { setSearchName(e.target.value); setSearchId(''); setSearchPhone(''); }}
                       className="pl-9 bg-secondary/50"
                     />
                   </div>
@@ -186,11 +210,7 @@ const Attendance: React.FC = () => {
                       id="searchId"
                       placeholder="e.g., IAG00001"
                       value={searchId}
-                      onChange={(e) => {
-                        setSearchId(e.target.value);
-                        setSearchName('');
-                        setSearchPhone('');
-                      }}
+                      onChange={(e) => { setSearchId(e.target.value); setSearchName(''); setSearchPhone(''); }}
                       className="pl-9 bg-secondary/50"
                     />
                   </div>
@@ -203,54 +223,69 @@ const Attendance: React.FC = () => {
                       id="searchPhone"
                       placeholder="Enter phone number..."
                       value={searchPhone}
-                      onChange={(e) => {
-                        setSearchPhone(e.target.value);
-                        setSearchName('');
-                        setSearchId('');
-                      }}
+                      onChange={(e) => { setSearchPhone(e.target.value); setSearchName(''); setSearchId(''); }}
                       className="pl-9 bg-secondary/50"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Search Results */}
               {searchResults.length > 0 && (
                 <div className="space-y-2 pt-4 border-t border-border/30">
-                  {searchResults.map(member => (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
-                    >
-                      <div>
-                        <p className="font-medium">{member.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {member.memberId} • {member.phone}
-                        </p>
+                  {searchResults.map(member => {
+                    const address = formatAddress(member);
+                    const familyMembers = getFamilyMembers(member);
+                    const hasFamily = familyMembers.length > 1;
+                    return (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium">{member.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {member.memberId} • {member.phone}
+                          </p>
+                          {address && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{address}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {markedMemberIds.has(member.id) ? (
+                            <Badge className="badge-success">
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              Present
+                            </Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => handleMarkAttendance(member)}
+                              className="bg-emerald-600 hover:bg-emerald-700"
+                            >
+                              <UserCheck className="w-4 h-4 mr-1" />
+                              Mark Present
+                            </Button>
+                          )}
+                          {hasFamily && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleMarkFullFamily(member)}
+                              className="border-primary/50 text-primary hover:bg-primary/10"
+                            >
+                              <Users className="w-4 h-4 mr-1" />
+                              Full Family ({familyMembers.length})
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      {markedMemberIds.has(member.id) ? (
-                        <Badge className="badge-success">
-                          <CheckCircle2 className="w-3 h-3 mr-1" />
-                          Present
-                        </Badge>
-                      ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => handleMarkAttendance(member)}
-                          className="bg-emerald-600 hover:bg-emerald-700"
-                        >
-                          <UserCheck className="w-4 h-4 mr-1" />
-                          Mark Present
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
 
-          {/* Present Members List */}
           <div className="glass rounded-xl p-6 animate-fade-in [animation-delay:300ms]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold flex items-center gap-2">

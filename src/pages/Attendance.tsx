@@ -27,6 +27,7 @@ const Attendance: React.FC = () => {
   const [searchName, setSearchName] = useState('');
   const [searchId, setSearchId] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
+  const [markingFamilyId, setMarkingFamilyId] = useState<string | null>(null);
 
   const canMark = hasPermission('attendance.mark');
 
@@ -107,23 +108,27 @@ const Attendance: React.FC = () => {
       toast.info('All family members are already marked present');
       return;
     }
+    setMarkingFamilyId(member.familyId);
     try {
-      const newRecords: AttendanceType[] = [];
-      for (const fm of unmarked) {
-        const data = {
-          eventId: selectedEventId,
-          memberId: fm.id,
-          markedAt: new Date().toISOString(),
-          markedBy: user?.id || 'unknown'
-        };
-        const id = await markAttendance(data);
-        newRecords.push({ id, ...data });
-      }
-      setAttendance(prev => [...prev, ...newRecords]);
-      toast.success(`Marked ${unmarked.length} family member(s) as present`);
+      const results = await Promise.all(
+        unmarked.map(async (fm) => {
+          const data = {
+            eventId: selectedEventId,
+            memberId: fm.id,
+            markedAt: new Date().toISOString(),
+            markedBy: user?.id || 'unknown'
+          };
+          const id = await markAttendance(data);
+          return { id, ...data } as AttendanceType;
+        })
+      );
+      setAttendance(prev => [...prev, ...results]);
+      toast.success(`Marked ${results.length} family member(s) as present`);
     } catch (error) {
       console.error('Error marking family attendance:', error);
       toast.error('Failed to mark family attendance');
+    } finally {
+      setMarkingFamilyId(null);
     }
   };
 
@@ -271,9 +276,14 @@ const Attendance: React.FC = () => {
                               size="sm"
                               variant="outline"
                               onClick={() => handleMarkFullFamily(member)}
+                              disabled={markingFamilyId === member.familyId}
                               className="border-primary/50 text-primary hover:bg-primary/10"
                             >
-                              <Users className="w-4 h-4 mr-1" />
+                              {markingFamilyId === member.familyId ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              ) : (
+                                <Users className="w-4 h-4 mr-1" />
+                              )}
                               Full Family ({familyMembers.length})
                             </Button>
                           )}

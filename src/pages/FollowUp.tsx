@@ -16,6 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Phone, MapPin, MessageCircle, CheckCircle2, AlertCircle, Users, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { transliterateToTamil } from '@/lib/tamilTransliterate';
 
 interface FollowUpStatus {
   [memberId: string]: {
@@ -377,6 +378,7 @@ const FollowUp: React.FC = () => {
                         <div className="flex items-start justify-between mb-3">
                           <div>
                             <h4 className="font-semibold text-lg">{member.name}</h4>
+                            <p className="text-sm text-muted-foreground">{member.tamilName || transliterateToTamil(member.name)}</p>
                             <p className="text-sm text-muted-foreground font-mono">{member.memberId}</p>
                           </div>
                           <div className="flex gap-2">
@@ -396,9 +398,16 @@ const FollowUp: React.FC = () => {
                           </div>
                           <div className="flex items-start gap-2 text-muted-foreground">
                             <MapPin className="w-4 h-4 text-primary mt-0.5" />
-                            <span>
-                              {member.address.place}, {member.address.city}
-                            </span>
+                            <div>
+                              <span>{[member.address?.place, member.address?.city, member.address?.district].filter(Boolean).join(', ')}</span>
+                              <p className="text-xs italic mt-0.5">
+                                {[
+                                  member.tamilAddress?.place || (member.address?.place ? transliterateToTamil(member.address.place) : ''),
+                                  member.tamilAddress?.city || (member.address?.city ? transliterateToTamil(member.address.city) : ''),
+                                  member.tamilAddress?.district || (member.address?.district ? transliterateToTamil(member.address.district) : ''),
+                                ].filter(Boolean).join(', ')}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>

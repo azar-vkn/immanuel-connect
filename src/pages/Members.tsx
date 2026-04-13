@@ -596,9 +596,11 @@ const Members: React.FC = () => {
                 size="sm"
                 className="gap-2"
                 onClick={() => {
+                  const { transliterateToTamil } = await import('@/lib/tamilTransliterate');
                   const headers = [
-                    'memberId','name','dob','gender','phone',
+                    'memberId','name','tamilName','dob','gender','phone',
                     'place','city','district','state','country','pincode',
+                    'tamilPlace','tamilCity','tamilDistrict','tamilState',
                     'familyId','isHeadOfFamily','relationship',
                     'maritalStatus','anniversaryDate','baptismStatus','baptismDate',
                     'churchRole','team','status','remarks'
@@ -606,6 +608,7 @@ const Members: React.FC = () => {
                   const rows = members.map(m => [
                     m.memberId,
                     m.name,
+                    m.tamilName || transliterateToTamil(m.name),
                     m.dob,
                     m.gender,
                     m.phone,
@@ -615,6 +618,10 @@ const Members: React.FC = () => {
                     m.address?.state || '',
                     m.address?.country || '',
                     m.address?.pincode || '',
+                    m.tamilAddress?.place || (m.address?.place ? transliterateToTamil(m.address.place) : ''),
+                    m.tamilAddress?.city || (m.address?.city ? transliterateToTamil(m.address.city) : ''),
+                    m.tamilAddress?.district || (m.address?.district ? transliterateToTamil(m.address.district) : ''),
+                    m.tamilAddress?.state || (m.address?.state ? transliterateToTamil(m.address.state) : ''),
                     m.familyId || m.memberId,
                     String(m.isHeadOfFamily ?? true),
                     m.relationship || 'Head',

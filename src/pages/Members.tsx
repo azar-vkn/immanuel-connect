@@ -595,7 +595,7 @@ const Members: React.FC = () => {
               <Button
                 size="sm"
                 className="gap-2"
-                onClick={() => {
+                onClick={async () => {
                   const { transliterateToTamil } = await import('@/lib/tamilTransliterate');
                   const headers = [
                     'memberId','name','tamilName','dob','gender','phone',

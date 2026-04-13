@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserCheck, UserX, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { transliterateToTamil } from '@/lib/tamilTransliterate';
 
 interface FellowshipReportProps {
   members: Member[];
@@ -54,6 +55,21 @@ const CATEGORY_COLORS: Record<FellowshipCategory, string> = {
   "Women's Fellowship": 'bg-purple-500/15 text-purple-400 border-purple-500/30',
 };
 
+const formatTamilAddress = (m: Member) => {
+  const ta = m.tamilAddress;
+  const parts = [
+    ta?.place || (m.address?.place ? transliterateToTamil(m.address.place) : ''),
+    ta?.city || (m.address?.city ? transliterateToTamil(m.address.city) : ''),
+    ta?.district || (m.address?.district ? transliterateToTamil(m.address.district) : ''),
+    ta?.state || (m.address?.state ? transliterateToTamil(m.address.state) : ''),
+  ];
+  return parts.filter(Boolean).join(', ');
+};
+
+const formatAddress = (m: Member) => {
+  return [m.address?.place, m.address?.city, m.address?.district, m.address?.state].filter(Boolean).join(', ');
+};
+
 const MemberTable: React.FC<{ members: Member[] }> = ({ members }) => {
   if (members.length === 0) {
     return <p className="text-sm text-muted-foreground text-center py-4">No members</p>;
@@ -65,6 +81,7 @@ const MemberTable: React.FC<{ members: Member[] }> = ({ members }) => {
           <TableHead className="text-muted-foreground text-xs">S.No</TableHead>
           <TableHead className="text-muted-foreground text-xs">Member ID</TableHead>
           <TableHead className="text-muted-foreground text-xs">Name</TableHead>
+          <TableHead className="text-muted-foreground text-xs">Tamil Name</TableHead>
           <TableHead className="text-muted-foreground text-xs">Phone</TableHead>
           <TableHead className="text-muted-foreground text-xs">Team</TableHead>
         </TableRow>
@@ -75,6 +92,7 @@ const MemberTable: React.FC<{ members: Member[] }> = ({ members }) => {
             <TableCell className="text-sm text-muted-foreground">{idx + 1}</TableCell>
             <TableCell className="font-mono text-sm text-primary">{m.memberId}</TableCell>
             <TableCell className="font-medium text-sm">{m.name}</TableCell>
+            <TableCell className="text-sm text-muted-foreground">{m.tamilName || transliterateToTamil(m.name)}</TableCell>
             <TableCell className="text-sm text-muted-foreground">{m.phone}</TableCell>
             <TableCell>
               {m.team && (
@@ -122,14 +140,14 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
   const totalAbsent = Object.values(data).reduce((s, c) => s + c.absent.length, 0);
 
   const handleExport = () => {
-    const headers = ['Fellowship', 'Member ID', 'Name', 'Phone', 'Team', 'Status'];
+    const headers = ['Fellowship', 'Member ID', 'Name', 'Tamil Name', 'Phone', 'Address', 'Tamil Address', 'Team', 'Status'];
     const rows: string[][] = [];
     CATEGORY_ORDER.forEach(cat => {
       data[cat].present.forEach(m => {
-        rows.push([cat, m.memberId, m.name, m.phone, m.team || '-', 'Present']);
+        rows.push([cat, m.memberId, m.name, m.tamilName || transliterateToTamil(m.name), m.phone, formatAddress(m), formatTamilAddress(m), m.team || '-', 'Present']);
       });
       data[cat].absent.forEach(m => {
-        rows.push([cat, m.memberId, m.name, m.phone, m.team || '-', 'Absent']);
+        rows.push([cat, m.memberId, m.name, m.tamilName || transliterateToTamil(m.name), m.phone, formatAddress(m), formatTamilAddress(m), m.team || '-', 'Absent']);
       });
     });
     rows.push([]);
@@ -140,8 +158,8 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
       rows.push([cat, String(total), String(data[cat].present.length), String(data[cat].absent.length), `${pct}%`]);
     });
     rows.push(['Total', String(members.length), String(totalPresent), String(totalAbsent), `${members.length > 0 ? Math.round((totalPresent / members.length) * 100) : 0}%`]);
-    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell || ''}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const csvContent = '\uFEFF' + [headers, ...rows].map(row => row.map(cell => `"${cell || ''}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -152,12 +170,12 @@ export const FellowshipReport: React.FC<FellowshipReportProps> = ({
 
   const handleExportCategory = (cat: FellowshipCategory, type: 'present' | 'absent' | 'all') => {
     const { present, absent } = data[cat];
-    const headers = ['S.No', 'Member ID', 'Name', 'Phone', 'Team'];
+    const headers = ['S.No', 'Member ID', 'Name', 'Tamil Name', 'Phone', 'Address', 'Tamil Address', 'Team'];
     const list = type === 'present' ? present : type === 'absent' ? absent : [...present, ...absent];
     const statusLabel = type === 'present' ? 'Participants' : type === 'absent' ? 'Absentees' : 'All';
-    const rows = list.map((m, idx) => [String(idx + 1), m.memberId, m.name, m.phone, m.team || '-']);
-    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const rows = list.map((m, idx) => [String(idx + 1), m.memberId, m.name, m.tamilName || transliterateToTamil(m.name), m.phone, formatAddress(m), formatTamilAddress(m), m.team || '-']);
+    const csvContent = '\uFEFF' + [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

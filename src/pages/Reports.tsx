@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { getEvents, getMembers, getAttendance } from '@/services/firestore';
+import { transliterateToTamil } from '@/lib/tamilTransliterate';
 import { ChurchEvent, Member, Attendance } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -77,21 +78,39 @@ const Reports: React.FC = () => {
     }
   }, [selectedEventId, reportType, members, attendance]);
 
+  const formatAddress = (m: Member) => {
+    return [m.address?.place, m.address?.city, m.address?.district, m.address?.state].filter(Boolean).join(', ');
+  };
+
+  const formatTamilAddress = (m: Member) => {
+    const ta = m.tamilAddress;
+    const parts = [
+      ta?.place || (m.address?.place ? transliterateToTamil(m.address.place) : ''),
+      ta?.city || (m.address?.city ? transliterateToTamil(m.address.city) : ''),
+      ta?.district || (m.address?.district ? transliterateToTamil(m.address.district) : ''),
+      ta?.state || (m.address?.state ? transliterateToTamil(m.address.state) : ''),
+    ];
+    return parts.filter(Boolean).join(', ');
+  };
+
   const handleExport = () => {
-    const headers = ['Member ID', 'Name', 'Phone', 'Team', 'Status'];
+    const headers = ['Member ID', 'Name', 'Tamil Name', 'Phone', 'Address', 'Tamil Address', 'Team', 'Status'];
     const rows = reportData.map(m => [
       m.memberId,
       m.name,
+      m.tamilName || transliterateToTamil(m.name),
       m.phone,
+      formatAddress(m),
+      formatTamilAddress(m),
       m.team || '-',
       reportType === 'all' ? ((m as any).isPresent ? 'Present' : 'Absent') : reportType
     ]);
 
-    const csvContent = [headers, ...rows]
+    const csvContent = '\uFEFF' + [headers, ...rows]
       .map(row => row.map(cell => `"${cell}"`).join(','))
       .join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

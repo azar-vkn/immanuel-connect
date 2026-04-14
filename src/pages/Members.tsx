@@ -593,6 +593,26 @@ const Members: React.FC = () => {
                 Replace All Data
               </Button>
               <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={async () => {
+                  if (!confirm('Clear remarks for all members?')) return;
+                  try {
+                    const updates = members.filter(m => m.remarks && m.remarks.trim() !== '');
+                    await Promise.all(updates.map(m => updateMember(m.id, { remarks: '' })));
+                    setMembers(prev => prev.map(m => ({ ...m, remarks: '' })));
+                    toast.success(`Cleared remarks for ${updates.length} members`);
+                  } catch (e) {
+                    console.error(e);
+                    toast.error('Failed to clear remarks');
+                  }
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear All Remarks
+              </Button>
+              <Button
                 size="sm"
                 className="gap-2"
                 onClick={async () => {
